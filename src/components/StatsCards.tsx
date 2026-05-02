@@ -1,0 +1,152 @@
+import { motion, type Variants } from "framer-motion";
+import { Timer, Wifi, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import type { ConnState } from "../types";
+
+interface Props {
+  state: ConnState;
+  uptime: number;
+  ping: number;
+  down: number;
+  up: number;
+}
+
+function fmtTime(s: number) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function fmtBytes(b: number) {
+  if (b < 1024) return `${b.toFixed(0)}B/s`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}KiB/s`;
+  return `${(b / 1024 / 1024).toFixed(2)}MiB/s`;
+}
+
+const container: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      delayChildren: 0.06,
+      staggerChildren: 0.07,
+    },
+  },
+};
+
+const card: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 18,
+    scale: 0.92,
+    filter: "blur(6px)",
+  },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    filter: "blur(0px)",
+    transition: {
+      type: "spring",
+      stiffness: 210,
+      damping: 22,
+      mass: 0.55,
+    },
+  },
+};
+
+const icon: Variants = {
+  hidden: { scale: 0.4, opacity: 0 },
+  show: {
+    scale: 1,
+    opacity: 1,
+    transition: { type: "spring", stiffness: 400, damping: 18, delay: 0.08 },
+  },
+};
+
+const value: Variants = {
+  hidden: { opacity: 0, y: 6 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.32, ease: [0.2, 0.8, 0.2, 1], delay: 0.12 },
+  },
+};
+
+export function StatsCards({ state, uptime, ping, down, up }: Props) {
+  const items = [
+    {
+      icon: Timer,
+      label: "Время",
+      value: state === "connected" ? fmtTime(uptime) : "00:00:00",
+      color: "text-violet-300",
+      glow: "from-violet-400/25",
+    },
+    {
+      icon: Wifi,
+      label: "Пинг",
+      value: state === "connected" && ping > 0 ? `${ping} ms` : "0 ms",
+      color: "text-sky-300",
+      glow: "from-sky-400/25",
+    },
+    {
+      icon: ArrowDownToLine,
+      label: "Загрузка",
+      value: state === "connected" ? fmtBytes(down) : "0B/s",
+      color: "text-emerald-300",
+      glow: "from-emerald-400/25",
+    },
+    {
+      icon: ArrowUpFromLine,
+      label: "Отдача",
+      value: state === "connected" ? fmtBytes(up) : "0B/s",
+      color: "text-amber-300",
+      glow: "from-amber-400/25",
+    },
+  ];
+
+  return (
+    <motion.div
+      className="grid grid-cols-4 gap-2.5"
+      variants={container}
+      initial="hidden"
+      animate="show"
+    >
+      {items.map((it) => {
+        const Icon = it.icon;
+        return (
+          <motion.div
+            key={it.label}
+            variants={card}
+            className="glass rounded-xl px-3.5 py-2.5 select-none relative overflow-hidden"
+          >
+            <div
+              className={
+                "absolute -top-8 -left-8 w-24 h-24 rounded-full blur-2xl pointer-events-none bg-gradient-to-br to-transparent " +
+                it.glow
+              }
+            />
+            <div className="relative flex items-center gap-2 text-[12.5px] text-white/55 mb-1.5">
+              <motion.span variants={icon} className="inline-flex">
+                <Icon
+                  size={18}
+                  className={it.color}
+                  strokeWidth={2}
+                  absoluteStrokeWidth
+                />
+              </motion.span>
+              <span>{it.label}</span>
+            </div>
+            <motion.div
+              variants={value}
+              className="relative text-[15px] font-mono font-normal text-white/95 tracking-tight"
+              style={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {it.value}
+            </motion.div>
+          </motion.div>
+        );
+      })}
+    </motion.div>
+  );
+}
