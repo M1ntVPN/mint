@@ -566,10 +566,7 @@ function App() {
           const confirmActive =
             vals["mint.confirmCloseWhileConnected"] !== false;
           const vpnActive = useConnection.getState().state === "connected";
-          if (vpnActive && confirmActive) {
-            setPendingClose(true);
-            return;
-          }
+
           if (closeToTray) {
             try {
               const { getCurrentWebviewWindow } = await import(
@@ -578,18 +575,17 @@ function App() {
               await getCurrentWebviewWindow().hide();
             } catch {
             }
-          } else {
-            try {
-              const { getCurrentWebviewWindow } = await import(
-                "@tauri-apps/api/webviewWindow"
-              );
-              await getCurrentWebviewWindow().hide();
-            } catch {
-            }
-            try {
-              await invoke("quit_app");
-            } catch {
-            }
+            return;
+          }
+
+          if (vpnActive && confirmActive) {
+            setPendingClose(true);
+            return;
+          }
+
+          try {
+            await invoke("quit_app");
+          } catch {
           }
         });
       } catch {
@@ -735,9 +731,9 @@ function App() {
       <ConfirmDialog
         open={pendingClose}
         title="VPN активен — закрыть Mint?"
-        description="Подтверди чтобы отключить туннель и выйти из приложения. Отмена — окно свернётся в трей, туннель останется поднятым."
+        description="Туннель будет отключён, и приложение полностью завершит работу."
         confirmLabel="Отключить и выйти"
-        cancelLabel="Оставить в трее"
+        cancelLabel="Не закрывать"
         destructive
         onConfirm={async () => {
           setPendingClose(false);
@@ -753,15 +749,8 @@ function App() {
           } catch {
           }
         }}
-        onCancel={async () => {
+        onCancel={() => {
           setPendingClose(false);
-          try {
-            const { getCurrentWebviewWindow } = await import(
-              "@tauri-apps/api/webviewWindow"
-            );
-            await getCurrentWebviewWindow().hide();
-          } catch {
-          }
         }}
       />
     </div>

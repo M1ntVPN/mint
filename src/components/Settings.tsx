@@ -333,34 +333,22 @@ function BehaviorSection() {
   return (
     <>
       <SectionCard icon={MonitorCog} title="Окно и трей">
-        <RowWrap
-          label="Сворачивать в трей при закрытии"
-          desc="Крестик прячет окно в системный лоток. Выход — через контекстное меню иконки."
-        >
+        <RowWrap label="Сворачивать в трей при закрытии">
           <Toggle value={closeToTray} onChange={setCloseToTray} />
         </RowWrap>
       </SectionCard>
 
       <SectionCard icon={Play} title="Автозапуск и автоподключение">
-        <RowWrap
-          label="Запускать Mint при входе в систему"
-          desc="На Windows добавляется в реестр HKCU\\Run; на Linux — в ~/.config/autostart"
-        >
+        <RowWrap label="Запускать Mint при входе в систему">
           <Toggle value={autostart} onChange={toggleAutostart} disabled={busy} />
         </RowWrap>
-        <RowWrap
-          label="Подключаться автоматически при старте"
-          desc="Мгновенно поднимает туннель при запуске приложения."
-        >
+        <RowWrap label="Подключаться автоматически при старте">
           <Toggle value={autoConnect} onChange={setAutoConnect} />
         </RowWrap>
       </SectionCard>
 
       <SectionCard icon={Bell} title="Уведомления">
-        <RowWrap
-          label="Показывать уведомления о подключении"
-          desc="Нативные уведомления OS при подключении, отключении и ошибках."
-        >
+        <RowWrap label="Показывать уведомления о подключении">
           <Toggle value={notifications} onChange={setNotifications} />
         </RowWrap>
       </SectionCard>
@@ -382,22 +370,13 @@ function ConfirmationsSection() {
 
   return (
     <SectionCard icon={HelpCircle} title="Запрашивать подтверждение">
-      <RowWrap
-        label="При смене сервера во время активного VPN"
-        desc="Защита от случайного клика по другому серверу — спросим перед тем, как переподключиться."
-      >
+      <RowWrap label="При смене сервера во время активного VPN">
         <Toggle value={confirmServerSwitch} onChange={setConfirmServerSwitch} />
       </RowWrap>
-      <RowWrap
-        label="При удалении сервера, папки или правила"
-        desc="Покажем диалог «Удалить?» перед тем, как что-то стереть из списка."
-      >
+      <RowWrap label="При удалении сервера, папки или правила">
         <Toggle value={confirmDelete} onChange={setConfirmDelete} />
       </RowWrap>
-      <RowWrap
-        label="При закрытии приложения с активным VPN"
-        desc="Спросит, отключить туннель и выйти — или оставить его поднятым в трее."
-      >
+      <RowWrap label="При закрытии приложения с активным VPN">
         <Toggle
           value={confirmCloseWhileConnected}
           onChange={setConfirmCloseWhileConnected}
@@ -426,10 +405,7 @@ function SecuritySection() {
 
   return (
     <SectionCard icon={ShieldCheck} title="Kill-switch">
-      <RowWrap
-        label="Блокировать интернет при обрыве VPN"
-        desc="Если туннель упадёт — вся не-VPN активность блокируется правилами Windows Firewall, пока подключение не восстановится. Работает только на Windows."
-      >
+      <RowWrap label="Блокировать интернет при обрыве VPN">
         <Toggle value={killSwitch} onChange={onToggle} />
       </RowWrap>
     </SectionCard>
