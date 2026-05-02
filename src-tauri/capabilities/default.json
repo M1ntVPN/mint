@@ -1,7 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for the main Mint window",
+  "description": "Capabilities for the main Mint window (desktop)",
+  "platforms": ["windows", "linux", "macOS"],
   "windows": ["main"],
   "permissions": [
     "core:default",
