@@ -290,10 +290,11 @@ fn run_desktop() {
 
 #[cfg(mobile)]
 fn run_mobile() {
-    // Phase 1 mobile build: ship the polished UI, gate VPN engine + every
-    // desktop-only side effect (tray, autostart, updater, sing-box sidecar,
-    // sysproxy, killswitch). Real Android tunneling is wired in Phase 2 via
-    // VpnService + sing-box AAR; until then `connect` is disabled in the UI.
+    // Phase 2 mobile build: real VPN tunneling on Android via VpnService +
+    // sing-box (libbox.aar). The Tauri plugin `tauri-plugin-mintvpn` exposes
+    // prepare_vpn / start_vpn / stop_vpn / vpn_status to the JS layer; the
+    // UI on Android calls these instead of the desktop sing-box sidecar.
+    // Tray, autostart, updater, sysproxy, killswitch remain desktop-only.
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -301,6 +302,7 @@ fn run_mobile() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_mintvpn::init())
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
             commands::is_elevated,
