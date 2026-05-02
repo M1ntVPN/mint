@@ -1,0 +1,66 @@
+{
+  "name": "mint-vpn",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Mint VPN — modern, polished VPN desktop client built on Tauri 2 + React 19. Sing-box engine, split-tunneling, killswitch, premium UI.",
+  "author": "M1ntVPN",
+  "license": "MIT",
+  "homepage": "https://github.com/M1ntVPN/mint",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/M1ntVPN/mint.git"
+  },
+  "bugs": {
+    "url": "https://github.com/M1ntVPN/mint/issues"
+  },
+  "keywords": [
+    "vpn",
+    "tauri",
+    "sing-box",
+    "split-tunneling",
+    "killswitch",
+    "desktop",
+    "windows",
+    "react"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-fs": "^2.4.2",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-os": "^2.3.2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-shell": "^2.3.3",
+    "@tauri-apps/plugin-updater": "^2.9.0",
+    "clsx": "2.1.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.14.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tailwind-merge": "3.4.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@tauri-apps/cli": "^2.10.1",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.2.4"
+  }
+}

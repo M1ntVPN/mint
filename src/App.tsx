@@ -1,0 +1,771 @@
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { TitleBar } from "./components/TitleBar";
+import { AppBackground } from "./components/AppBackground";
+import { Sidebar, type PageKey } from "./components/Sidebar";
+import { Dashboard } from "./components/Dashboard";
+import { ProfilesPage } from "./components/Profiles";
+import { TunnelingPage } from "./components/Tunneling";
+import { SettingsPage } from "./components/Settings";
+import { LogsPage } from "./components/Logs";
+import type { ConnState } from "./types";
+import { useServers } from "./store/servers";
+import { useSubscriptions, decodeProfileTitle } from "./store/subscriptions";
+import { useFolders } from "./store/folders";
+import { useMultiHop } from "./store/multihop";
+import { useLogs, parseEngineLine } from "./store/logs";
+import { useConnection } from "./store/connection";
+import { startEngine, stopEngine, onEngineExit, onEngineLog } from "./engine/engine";
+import { subscribeTraffic, urlTest } from "./engine/clashApi";
+import { probeServer } from "./utils/ping";
+import { notify } from "./utils/notify";
+import { invoke } from "@tauri-apps/api/core";
+import { useSettingsStore } from "./store/settings";
+import { useTunneling, type AppRule, type AppFolder, type NetRule, type TunnelMode } from "./store/tunneling";
+import { ConfirmDialog } from "./components/ConfirmDialog";
+
+function serializeTunnelingConfig(s: {
+  mode: TunnelMode;
+  apps: AppRule[];
+  nets: NetRule[];
+  folders: AppFolder[];
+}): string {
+  const apps = s.apps
+    .map((a) => `${a.id}|${a.via}|${a.folderId ?? "_"}`)
+    .sort()
+    .join(",");
+  const nets = s.nets
+    .map((n) => `${n.id}|${n.via}|${n.pattern}`)
+    .sort()
+    .join(",");
+  const folders = s.folders
+    .map((f) => f.id)
+    .sort()
+    .join(",");
+  return `${s.mode}::${apps}::${nets}::${folders}`;
+}
+
+function App() {
+  const [page, setPage] = useState<PageKey>("home");
+  const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
+  const [state, setState] = useState<ConnState>("disconnected");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [uptime, setUptime] = useState(0);
+  const [ping, setPing] = useState(0);
+  const [down, setDown] = useState(0);
+  const [up, setUp] = useState(0);
+  const [update, setUpdate] = useState<{ version: string; notes?: string } | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
+  const [pendingClose, setPendingClose] = useState<boolean>(false);
+
+  const tickRef = useRef<number | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const [hasRealEngine, setHasRealEngine] = useState(false);
+
+  useEffect(() => {
+    useConnection.getState().setState(state);
+  }, [state]);
+
+  const autoConnectedRef = useRef(false);
+  useEffect(() => {
+    if (autoConnectedRef.current) return;
+    const vals = useSettingsStore.getState().values;
+    if (vals["mint.autoConnect"] !== true) return;
+    if (state !== "disconnected") return;
+    const servers = useServers.getState().servers;
+    if (servers.length === 0) return;
+    autoConnectedRef.current = true;
+    setSelectedId((id) => id ?? servers[0].id);
+    window.setTimeout(() => {
+      toggle().catch(() => undefined);
+    }, 250);
+  }, [state]);
+
+  useEffect(() => {
+    if (tickRef.current) window.clearInterval(tickRef.current);
+    let unsubTraffic: (() => void) | undefined;
+    let pingTimer: number | undefined;
+
+    if (state === "connected" && hasRealEngine) {
+      tickRef.current = window.setInterval(() => setUptime((u) => u + 1), 1000);
+
+      unsubTraffic = subscribeTraffic((sample) => {
+        setDown(sample.down);
+        setUp(sample.up);
+      });
+      const probe = async () => {
+        const ms = await urlTest("proxy");
+        if (ms != null && ms > 0) {
+          setPing(ms);
+          const sid = selectedIdRef.current;
+          if (sid) useServers.getState().setPing(sid, ms);
+        }
+      };
+      probe();
+      pingTimer = window.setInterval(probe, 5000);
+    }
+
+    return () => {
+      if (tickRef.current) window.clearInterval(tickRef.current);
+      unsubTraffic?.();
+      if (pingTimer != null) window.clearInterval(pingTimer);
+    };
+  }, [state, hasRealEngine]);
+
+  const savedServers = useServers((s) => s.servers);
+  const subscriptions = useSubscriptions((s) => s.list);
+  const { enabled: multihopOn, entryId, exitId } = useMultiHop();
+
+  useEffect(() => {
+    if (subscriptions.length === 0) return;
+    const fState = useFolders.getState();
+    const sState = useSubscriptions.getState();
+    const needsTitleFix = (n: string) => /^base64\s*[:,]\s*/i.test(n.trim());
+    for (const sub of subscriptions) {
+      if (needsTitleFix(sub.name)) {
+        const fixed = decodeProfileTitle(sub.name);
+        if (fixed && fixed !== sub.name) sState.update(sub.id, { name: fixed });
+      }
+      if (fState.findBySubscription(sub.id)) {
+        const f = fState.findBySubscription(sub.id);
+        if (f && needsTitleFix(f.name)) {
+          const fixed = decodeProfileTitle(f.name);
+          if (fixed && fixed !== f.name) fState.rename(f.id, fixed);
+        }
+        continue;
+      }
+      const ids = savedServers
+        .filter((s) => s.subscriptionId === sub.id)
+        .map((s) => s.id);
+      if (ids.length === 0) continue;
+      const folderName = needsTitleFix(sub.name)
+        ? decodeProfileTitle(sub.name) ?? sub.name
+        : sub.name;
+      const folderId = fState.create(folderName, { subscriptionId: sub.id });
+      fState.setServerIds(folderId, ids);
+    }
+  }, [subscriptions]);
+
+  useEffect(() => {
+    if (selectedId == null && savedServers.length > 0) {
+      setSelectedId(savedServers[0].id);
+    }
+  }, [savedServers, selectedId]);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  const didProxyCleanRef = useRef(false);
+  useEffect(() => {
+    if (didProxyCleanRef.current) return;
+    didProxyCleanRef.current = true;
+    invoke("sysproxy_clear").catch(() => undefined);
+  }, []);
+
+  const didPlaceholderPurgeRef = useRef(false);
+  useEffect(() => {
+    if (didPlaceholderPurgeRef.current) return;
+    didPlaceholderPurgeRef.current = true;
+    const all = useServers.getState().servers;
+    const junk = all.filter((s) => {
+      const addr = (s.address ?? "").toLowerCase();
+      return (
+        addr.includes("00000000-0000-0000-0000-000000000000") ||
+        /@0\.0\.0\.0(:|$)/.test(addr) ||
+        /%20not%20supported|app%20not%20supported|happ(%20|-)required|upgrade%20required/i.test(
+          s.address ?? ""
+        )
+      );
+    });
+    if (junk.length === 0) return;
+    const remove = useServers.getState().remove;
+    for (const s of junk) remove(s.id);
+  }, []);
+
+  const pingedSetRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (state === "connected" || state === "connecting") return;
+    const setPing = useServers.getState().setPing;
+    const STALE_MS = 5 * 60 * 1000;
+    const now = Date.now();
+    const todo = savedServers.filter(
+      (s) =>
+        !pingedSetRef.current.has(s.id) ||
+        s.pingedAt == null ||
+        now - s.pingedAt > STALE_MS
+    );
+    if (todo.length === 0) return;
+    let cancelled = false;
+    const concurrency = 6;
+    let i = 0;
+    const next = async () => {
+      while (!cancelled) {
+        const idx = i++;
+        if (idx >= todo.length) return;
+        const s = todo[idx];
+        pingedSetRef.current.add(s.id);
+        try {
+          const ms = await probeServer(s);
+          if (!cancelled) setPing(s.id, ms);
+        } catch {
+          if (!cancelled) setPing(s.id, null);
+        }
+      }
+    };
+    const workers = Array.from(
+      { length: Math.min(concurrency, todo.length) },
+      () => next()
+    );
+    Promise.all(workers).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [savedServers.map((s) => s.id).join("|"), state]);
+
+  const toggleInFlightRef = useRef(false);
+
+  const doConnect = async () => {
+    const log = useLogs.getState().push;
+    const ts = () => new Date().toISOString().slice(11, 23);
+    const exit = savedServers.find((s) => s.id === selectedId) ?? null;
+    const entry = multihopOn
+      ? savedServers.find((s) => s.id === entryId) ?? null
+      : null;
+    const realExit = multihopOn
+      ? savedServers.find((s) => s.id === exitId) ?? exit
+      : exit;
+
+    if (!realExit) return;
+    const inTauri = !!(window as unknown as { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
+    if (!inTauri) {
+      console.warn("Cannot connect — Tauri runtime not available");
+      const msg =
+        "Tauri runtime недоступен — это окно открыто в обычном браузере, а не из Mint.exe.";
+      setConnectError(msg);
+      log({ t: ts(), lvl: "WARN", src: "ui", msg });
+      return;
+    }
+    setConnectError(null);
+
+    log({
+      t: ts(),
+      lvl: "INFO",
+      src: "ui",
+      msg: `Подключение к ${realExit.name}${entry ? ` через ${entry.name}` : ""}`,
+    });
+    setState("connecting");
+    try {
+      await startEngine({ exit: realExit, entry });
+      setHasRealEngine(true);
+      setState("connected");
+      setUptime(0);
+      setDown(0);
+      setUp(0);
+      setPing(0);
+      log({
+        t: ts(),
+        lvl: "INFO",
+        src: "engine",
+        msg: `Туннель поднят: ${realExit.protocol.toUpperCase()} → ${realExit.address}`,
+      });
+      const killEnabled =
+        useSettingsStore.getState().values["mint.killSwitch"] === true;
+      if (killEnabled) {
+        try {
+          await invoke("killswitch_enable");
+        } catch (err) {
+          console.warn("killswitch_enable failed", err);
+        }
+      }
+      notify("Mint VPN", `Подключено: ${realExit.name}`);
+    } catch (e) {
+      console.error("startEngine failed", e);
+      const detail =
+        typeof e === "string" ? e : (e as Error)?.message ?? "ошибка";
+      setConnectError(`Не удалось подключиться: ${detail}`);
+      log({
+        t: ts(),
+        lvl: "ERROR",
+        src: "engine",
+        msg: `startEngine: ${detail}`,
+      });
+      setState("disconnected");
+      notify("Mint VPN", `Ошибка подключения: ${detail}`);
+    }
+  };
+
+  const doDisconnect = async (opts?: { silent?: boolean; clearKillswitch?: boolean }) => {
+    const silent = !!opts?.silent;
+    const clearKill = opts?.clearKillswitch !== false;
+    const log = useLogs.getState().push;
+    const ts = () => new Date().toISOString().slice(11, 23);
+    if (!silent) {
+      log({ t: ts(), lvl: "INFO", src: "ui", msg: "Запрошено отключение" });
+    }
+    setState("disconnecting");
+    try {
+      await stopEngine();
+    } catch {
+    }
+    if (clearKill) {
+      try {
+        await invoke("killswitch_disable");
+      } catch {
+      }
+    }
+    setHasRealEngine(false);
+    if (!silent) {
+      setTimeout(() => setState("disconnected"), 600);
+      notify("Mint VPN", "Отключено");
+    } else {
+      setState("disconnected");
+    }
+  };
+
+  const toggle = async () => {
+    if (toggleInFlightRef.current) return;
+    toggleInFlightRef.current = true;
+    try {
+      if (state === "disconnected") {
+        await doConnect();
+      } else if (state === "connected") {
+        await doDisconnect();
+      }
+    } finally {
+      window.setTimeout(() => {
+        toggleInFlightRef.current = false;
+      }, 400);
+    }
+  };
+
+  const restartTunnel = async () => {
+    if (toggleInFlightRef.current) return;
+    toggleInFlightRef.current = true;
+    try {
+      await doDisconnect({ silent: true, clearKillswitch: false });
+      await new Promise((r) => window.setTimeout(r, 500));
+      await doConnect();
+    } finally {
+      window.setTimeout(() => {
+        toggleInFlightRef.current = false;
+      }, 400);
+    }
+  };
+
+  const requestSelectServer = (id: string) => {
+    if (id === selectedId) return;
+    const confirmActive =
+      useSettingsStore.getState().values["mint.confirmServerSwitch"] !== false;
+    if (state === "connected" && confirmActive) {
+      setPendingSwitchId(id);
+      return;
+    }
+    setSelectedId(id);
+  };
+
+  const acceptSwitchPending = () => {
+    if (!pendingSwitchId) return;
+    const id = pendingSwitchId;
+    setPendingSwitchId(null);
+    setSelectedId(id);
+    if (state === "connected") {
+      window.setTimeout(() => {
+        restartTunnel().catch(() => undefined);
+      }, 0);
+    }
+  };
+
+  useEffect(() => {
+    let unlistenExit: (() => void) | undefined;
+    let unlistenLog: (() => void) | undefined;
+    const push = useLogs.getState().push;
+    (async () => {
+      try {
+        unlistenExit = await onEngineExit((code) => {
+          setHasRealEngine(false);
+          setState("disconnected");
+          const t = new Date().toISOString().slice(11, 23);
+          const unexpected = !(code === 0 || code == null);
+          invoke("sysproxy_clear").catch(() => undefined);
+          const killEnabled =
+            useSettingsStore.getState().values["mint.killSwitch"] === true;
+          if (!unexpected) {
+            invoke("killswitch_disable").catch(() => undefined);
+          } else if (killEnabled) {
+            push({
+              t,
+              lvl: "WARN",
+              src: "engine",
+              msg:
+                "Killswitch активен — туннель упал, доступ в сеть заблокирован. " +
+                "Подключитесь снова или выключите killswitch в Настройках.",
+            });
+          }
+          push({
+            t,
+            lvl: unexpected ? "ERROR" : "INFO",
+            src: "engine",
+            msg: unexpected
+              ? `sing-box завершился с кодом ${code}`
+              : "sing-box остановлен",
+          });
+          if (unexpected) {
+            notify("Mint VPN", `Туннель упал: ${code}`);
+          }
+        });
+        unlistenLog = await onEngineLog((line) => {
+          push(parseEngineLine(line));
+        });
+      } catch {
+      }
+    })();
+    return () => {
+      unlistenExit?.();
+      unlistenLog?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { emit } = await import("@tauri-apps/api/event");
+        if (cancelled) return;
+        await emit("vpn-state", state);
+      } catch {
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("tray-toggle", () => toggle());
+      } catch {
+      }
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, [state]);
+
+  useEffect(() => {
+    let prev = serializeTunnelingConfig(useTunneling.getState());
+    let timer: number | undefined;
+    const unsub = useTunneling.subscribe((next) => {
+      const sig = serializeTunnelingConfig(next);
+      if (sig === prev) return;
+      prev = sig;
+      if (state !== "connected") return;
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const log = useLogs.getState().push;
+        const t = new Date().toISOString().slice(11, 23);
+        log({
+          t,
+          lvl: "INFO",
+          src: "engine",
+          msg: "Перезапуск туннеля: изменены настройки туннелирования",
+        });
+        restartTunnel().catch(() => undefined);
+      }, 600);
+    });
+    return () => {
+      unsub();
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [state]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<string>("deep-link", (event) => {
+          const url = event.payload;
+          if (!url) return;
+          setPage("profiles");
+          setPendingDeepLink(url);
+        });
+      } catch {
+      }
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<{
+          host: string;
+          resolved?: string;
+          dns_ms?: number;
+          attempts_ms?: number[];
+          errors?: string[];
+          error?: string;
+          stage?: string;
+          args_attempts?: number | null;
+          args_timeout_ms?: number | null;
+        }>("ping-diag", (event) => {
+          const p = event.payload;
+          const push = useLogs.getState().push;
+          const t = new Date().toISOString().slice(11, 23);
+          if (p.error) {
+            push({
+              t,
+              lvl: "WARN",
+              src: "ping",
+              msg: `${p.host}: ${p.error}`,
+            });
+            return;
+          }
+          const ms = p.attempts_ms ?? [];
+          const median =
+            ms.length > 0 ? [...ms].sort((a, b) => a - b)[Math.floor(ms.length / 2)] : null;
+          const argsTrace =
+            p.args_attempts == null && p.args_timeout_ms == null
+              ? " args=defaults"
+              : ` args=attempts:${p.args_attempts ?? "—"} timeoutMs:${p.args_timeout_ms ?? "—"}`;
+          push({
+            t,
+            lvl: ms.length > 0 ? "INFO" : "WARN",
+            src: "ping",
+            msg: `${p.host} → ${p.resolved ?? "?"} attempts=[${ms.join(", ")}]ms median=${median ?? "—"}ms${
+              p.errors && p.errors.length ? ` errs=${p.errors.join("|")}` : ""
+            }${argsTrace}`,
+          });
+        });
+      } catch {
+      }
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("close-requested", async () => {
+          const vals = useSettingsStore.getState().values;
+          const closeToTray = vals["mint.closeToTray"] !== false;
+          const confirmActive =
+            vals["mint.confirmCloseWhileConnected"] !== false;
+          const vpnActive = useConnection.getState().state === "connected";
+          if (vpnActive && confirmActive) {
+            setPendingClose(true);
+            return;
+          }
+          if (closeToTray) {
+            try {
+              const { getCurrentWebviewWindow } = await import(
+                "@tauri-apps/api/webviewWindow"
+              );
+              await getCurrentWebviewWindow().hide();
+            } catch {
+            }
+          } else {
+            try {
+              const { getCurrentWebviewWindow } = await import(
+                "@tauri-apps/api/webviewWindow"
+              );
+              await getCurrentWebviewWindow().hide();
+            } catch {
+            }
+            try {
+              await invoke("quit_app");
+            } catch {
+            }
+          }
+        });
+      } catch {
+      }
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  const updateRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const result = await check();
+        if (cancelled || !result) return;
+        updateRef.current = result;
+        const r = result as { version: string; body?: string | null };
+        setUpdate({ version: r.version, notes: r.body ?? undefined });
+      } catch {
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const installUpdate = async () => {
+    try {
+      let inst = updateRef.current as
+        | {
+            downloadAndInstall: () => Promise<void>;
+          }
+        | null;
+      if (!inst) {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const r = await check();
+        if (r) {
+          inst = r;
+          updateRef.current = r;
+        }
+      }
+      if (!inst) {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open("https://github.com/M1ntVPN/mint/releases/latest");
+        return;
+      }
+      try {
+        await invoke("prepare_for_update");
+      } catch {
+      }
+      await inst.downloadAndInstall();
+      try {
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      } catch {
+      }
+    } catch {
+      try {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open("https://github.com/M1ntVPN/mint/releases/latest");
+      } catch {
+        window.open("https://github.com/M1ntVPN/mint/releases/latest", "_blank");
+      }
+    }
+  };
+
+  const pendingSwitchServer = pendingSwitchId
+    ? savedServers.find((s) => s.id === pendingSwitchId) ?? null
+    : null;
+
+  return (
+    <div className="h-full w-full flex flex-col bg-ink-950 text-white relative overflow-hidden grain">
+      <AppBackground />
+
+      <TitleBar />
+
+      <div className="flex flex-1 overflow-hidden relative">
+        <Sidebar
+          page={page}
+          setPage={setPage}
+          state={state}
+          update={update}
+          onInstallUpdate={installUpdate}
+          onDismissUpdate={() => setUpdate(null)}
+        />
+
+        <main className="flex-1 relative overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={page}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+              className="absolute inset-0"
+            >
+              {page === "home" && (
+                <Dashboard
+                  state={state}
+                  toggle={toggle}
+                  uptime={uptime}
+                  ping={ping}
+                  down={down}
+                  up={up}
+                  selectedId={selectedId}
+                  setSelectedId={requestSelectServer}
+                  connectError={connectError}
+                  dismissConnectError={() => setConnectError(null)}
+                />
+              )}
+              {page === "profiles" && (
+                <ProfilesPage
+                  pendingDeepLink={pendingDeepLink}
+                  consumeDeepLink={() => setPendingDeepLink(null)}
+                />
+              )}
+              {page === "tunneling" && <TunnelingPage />}
+              {page === "settings" && <SettingsPage />}
+              {page === "logs" && <LogsPage />}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+
+      <ConfirmDialog
+        open={pendingSwitchServer !== null}
+        title={
+          pendingSwitchServer
+            ? `Переключиться на ${pendingSwitchServer.name}?`
+            : "Сменить сервер?"
+        }
+        description="VPN сейчас активен. Mint отключится от текущего сервера и переподключится к выбранному."
+        confirmLabel="Переподключиться"
+        cancelLabel="Остаться"
+        onConfirm={acceptSwitchPending}
+        onCancel={() => setPendingSwitchId(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingClose}
+        title="VPN активен — закрыть Mint?"
+        description="Подтверди чтобы отключить туннель и выйти из приложения. Отмена — окно свернётся в трей, туннель останется поднятым."
+        confirmLabel="Отключить и выйти"
+        cancelLabel="Оставить в трее"
+        destructive
+        onConfirm={async () => {
+          setPendingClose(false);
+          try {
+            const { getCurrentWebviewWindow } = await import(
+              "@tauri-apps/api/webviewWindow"
+            );
+            await getCurrentWebviewWindow().hide();
+          } catch {
+          }
+          try {
+            await invoke("quit_app");
+          } catch {
+          }
+        }}
+        onCancel={async () => {
+          setPendingClose(false);
+          try {
+            const { getCurrentWebviewWindow } = await import(
+              "@tauri-apps/api/webviewWindow"
+            );
+            await getCurrentWebviewWindow().hide();
+          } catch {
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+export default App;

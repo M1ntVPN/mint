@@ -1,0 +1,73 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mint VPN",
+  "mainBinaryName": "Mint",
+  "version": "0.2.0",
+  "identifier": "com.mint.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Mint VPN",
+        "width": 1200,
+        "height": 760,
+        "minWidth": 980,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": false,
+        "shadow": true,
+        "center": true,
+        "backgroundColor": "#07060d"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "publisher": "Mint VPN",
+    "shortDescription": "Mint VPN",
+    "longDescription": "Mint VPN — premium desktop client",
+    "category": "Utility",
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": true,
+        "languages": ["English", "Russian"],
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "compression": "lzma"
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": false,
+      "endpoints": [
+        "https://github.com/M1ntVPN/mint/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFNUI4MTk0NDNFN0ZBRjkKUldlNSt1ZERsSUZibnYwcE9nYk1TMjZ1bit1M1d0SDczUVJrazd6aXRDTUhFVDhzdU9yL1JOdGQK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

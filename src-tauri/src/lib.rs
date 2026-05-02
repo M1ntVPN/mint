@@ -1,0 +1,257 @@
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::image::Image;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{AppHandle, Emitter, Listener, Manager, WindowEvent};
+
+static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(true);
+
+#[tauri::command]
+fn set_close_to_tray(enabled: bool) {
+    CLOSE_TO_TRAY.store(enabled, Ordering::SeqCst);
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    perform_graceful_shutdown(&app);
+    app.exit(0);
+}
+
+#[tauri::command]
+fn prepare_for_update() {
+    singbox::kill_all_blocking();
+    let _ = sysproxy::sysproxy_clear();
+    killswitch::disable_blocking();
+}
+
+fn perform_graceful_shutdown(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    singbox::kill_all_blocking();
+    let _ = sysproxy::sysproxy_clear();
+    killswitch::disable_blocking();
+}
+
+mod commands;
+mod killswitch;
+mod singbox;
+mod sysapps;
+mod sysproxy;
+
+const TRAY_CONNECTED: &[u8] = include_bytes!("../icons/tray/tray-connected.png");
+const TRAY_CONNECTING: &[u8] = include_bytes!("../icons/tray/tray-connecting.png");
+const TRAY_DISCONNECTED: &[u8] = include_bytes!("../icons/tray/tray-disconnected.png");
+
+const WIN_ICON_SHIELD: &[u8] = include_bytes!("../icons/icon.png");
+const WIN_ICON_LEAF: &[u8] = include_bytes!("../icons/icon-leaf.png");
+
+#[tauri::command]
+fn set_window_icon(app: AppHandle, variant: String) -> Result<(), String> {
+    let bytes: &[u8] = match variant.as_str() {
+        "leaf" => WIN_ICON_LEAF,
+        _ => WIN_ICON_SHIELD,
+    };
+    let img = Image::from_bytes(bytes).map_err(|e| e.to_string())?;
+    if let Some(w) = app.get_webview_window("main") {
+        w.set_icon(img).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn icon_for(state: &str) -> Image<'static> {
+    let bytes: &[u8] = match state {
+        "connected" => TRAY_CONNECTED,
+        "connecting" | "disconnecting" => TRAY_CONNECTING,
+        _ => TRAY_DISCONNECTED,
+    };
+    Image::from_bytes(bytes).expect("tray icon bytes are valid PNG")
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+fn handle_deep_links(app: &AppHandle, urls: &[String]) {
+    if urls.is_empty() {
+        return;
+    }
+    show_main_window(app);
+    for raw in urls {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let _ = app.emit("deep-link", trimmed);
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app, args, _cwd| {
+                let urls: Vec<String> = args
+                    .iter()
+                    .filter(|a| {
+                        a.starts_with("mint://")
+                            || a.starts_with("flclashx://")
+                            || a.starts_with("clash://")
+                            || a.starts_with("sing-box://")
+                            || a.starts_with("vless://")
+                            || a.starts_with("vmess://")
+                            || a.starts_with("trojan://")
+                            || a.starts_with("ss://")
+                    })
+                    .cloned()
+                    .collect();
+                handle_deep_links(app, &urls);
+            },
+        ));
+    }
+
+    builder
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let _ = app.deep_link().register_all();
+            }
+
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let app_handle = app.handle().clone();
+                if let Ok(Some(initial)) = app.deep_link().get_current() {
+                    let urls: Vec<String> =
+                        initial.iter().map(|u| u.to_string()).collect();
+                    handle_deep_links(&app_handle, &urls);
+                }
+                let app_handle2 = app_handle.clone();
+                app.deep_link().on_open_url(move |event| {
+                    let urls: Vec<String> =
+                        event.urls().iter().map(|u| u.to_string()).collect();
+                    handle_deep_links(&app_handle2, &urls);
+                });
+            }
+            if let Some(main) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                main.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = app_handle.emit("close-requested", ());
+                    }
+                });
+            }
+
+            #[cfg(debug_assertions)]
+            {
+                let window = app.get_webview_window("main").unwrap();
+                window.open_devtools();
+            }
+
+            let show = MenuItem::with_id(app, "show", "Открыть Mint", true, None::<&str>)?;
+            let toggle = MenuItem::with_id(app, "toggle", "Подключиться / Отключить", true, None::<&str>)?;
+            let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &toggle, &separator, &quit])?;
+
+            let _tray = TrayIconBuilder::with_id("main")
+                .icon(icon_for("disconnected"))
+                .menu(&menu)
+                .tooltip("Mint VPN")
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => show_main_window(app),
+                    "toggle" => {
+                        let _ = app.emit("tray-toggle", ());
+                        show_main_window(app);
+                    }
+                    "quit" => {
+                        perform_graceful_shutdown(app);
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { button, button_state, .. } = event {
+                        if matches!(button, tauri::tray::MouseButton::Left)
+                            && matches!(button_state, tauri::tray::MouseButtonState::Up)
+                        {
+                            show_main_window(tray.app_handle());
+                        }
+                    }
+                })
+                .build(app)?;
+
+            let app_handle = app.handle().clone();
+            app.listen("vpn-state", move |event| {
+                let payload = event.payload().trim_matches('"').to_string();
+                if let Some(tray) = app_handle.tray_by_id("main") {
+                    let _ = tray.set_icon(Some(icon_for(&payload)));
+                    let tooltip = match payload.as_str() {
+                        "connected" => "Mint VPN — подключено",
+                        "connecting" => "Mint VPN — подключение…",
+                        "disconnecting" => "Mint VPN — отключение…",
+                        _ => "Mint VPN — отключено",
+                    };
+                    let _ = tray.set_tooltip(Some(tooltip));
+                }
+            });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::app_version,
+            commands::is_elevated,
+            commands::ping_test,
+            commands::fetch_subscription,
+            singbox::singbox_start,
+            singbox::singbox_stop,
+            singbox::singbox_running,
+            singbox::singbox_kill_orphans,
+            singbox::singbox_pick_free_clash_port,
+            sysproxy::sysproxy_set,
+            sysproxy::sysproxy_clear,
+            sysapps::list_installed_apps,
+            sysapps::list_running_processes,
+            sysapps::scan_folder_exes,
+            sysapps::get_exe_icons_b64,
+            killswitch::killswitch_enable,
+            killswitch::killswitch_disable,
+            killswitch::killswitch_active,
+            set_window_icon,
+            set_close_to_tray,
+            quit_app,
+            prepare_for_update,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running mint");
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppInfo {
+    pub name: String,
+    pub version: String,
+    pub channel: String,
+}
