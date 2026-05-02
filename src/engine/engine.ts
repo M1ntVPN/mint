@@ -11,6 +11,8 @@ import {
 import { useSettingsStore } from "../store/settings";
 import { useTunneling } from "../store/tunneling";
 import { useLogs } from "../store/logs";
+import { isAndroid } from "../utils/platform";
+import { vpnStart, vpnStop, vpnStatus } from "../utils/vpn";
 
 export interface StartOptions {
   exit: SavedServer;
@@ -28,15 +30,19 @@ function resolveDns(): { remoteDns?: string; localDns?: string } {
 }
 
 export async function startEngine(opts: StartOptions): Promise<void> {
-  try {
-    await invoke("singbox_kill_orphans");
-  } catch {
+  if (!isAndroid()) {
+    try {
+      await invoke("singbox_kill_orphans");
+    } catch {
+    }
   }
   let clashApiPort: number | null = null;
-  try {
-    const picked = await invoke<number | null>("singbox_pick_free_clash_port");
-    clashApiPort = typeof picked === "number" ? picked : null;
-  } catch {
+  if (!isAndroid()) {
+    try {
+      const picked = await invoke<number | null>("singbox_pick_free_clash_port");
+      clashApiPort = typeof picked === "number" ? picked : null;
+    } catch {
+    }
   }
   setClashApiPort(clashApiPort);
   const dns = resolveDns();
@@ -60,34 +66,46 @@ export async function startEngine(opts: StartOptions): Promise<void> {
     tunneling: { mode: t.mode, apps: t.apps, nets: t.nets },
     ...dns,
   });
-  await invoke("singbox_start", { config });
-  try {
-    await invoke("sysproxy_set", { server: `127.0.0.1:${MIXED_INBOUND_PORT}` });
-  } catch (e) {
-    console.warn("sysproxy_set failed", e);
+  const profileName = opts.exit.name || "Mint VPN";
+  const status = await vpnStart(config, profileName);
+  if (status.errorMsg) {
+    throw new Error(status.errorMsg);
+  }
+  if (!isAndroid()) {
+    try {
+      await invoke("sysproxy_set", { server: `127.0.0.1:${MIXED_INBOUND_PORT}` });
+    } catch (e) {
+      console.warn("sysproxy_set failed", e);
+    }
   }
 }
 
 export async function stopEngine(): Promise<void> {
-  try {
-    await invoke("sysproxy_clear");
-  } catch (e) {
-    console.warn("sysproxy_clear failed", e);
+  if (!isAndroid()) {
+    try {
+      await invoke("sysproxy_clear");
+    } catch (e) {
+      console.warn("sysproxy_clear failed", e);
+    }
   }
-  await invoke("singbox_stop");
+  await vpnStop();
 }
 
 export async function isEngineRunning(): Promise<boolean> {
-  return await invoke<boolean>("singbox_running");
+  return (await vpnStatus()).running;
 }
 
 export type LogHandler = (line: string) => void;
 export type ExitHandler = (code: number | null) => void;
 
 export async function onEngineLog(handler: LogHandler): Promise<UnlistenFn> {
+  // sing-box log streaming is desktop-only — Android's libbox routes its
+  // own logs through the foreground notification + Tauri events.
+  if (isAndroid()) return async () => {};
   return await listen<string>("singbox-log", (e) => handler(e.payload));
 }
 
 export async function onEngineExit(handler: ExitHandler): Promise<UnlistenFn> {
+  if (isAndroid()) return async () => {};
   return await listen<number | null>("singbox-exit", (e) => handler(e.payload));
 }

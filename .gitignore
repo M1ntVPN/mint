@@ -19,6 +19,9 @@ dist-ssr/
 src-tauri/target/
 src-tauri/gen/schemas/
 src-tauri/Cargo.lock.bak
+tauri-plugin-mintvpn/target/
+tauri-plugin-mintvpn/android/.tauri/
+tauri-plugin-mintvpn/permissions/schemas/
 
 # Build outputs
 *.exe
