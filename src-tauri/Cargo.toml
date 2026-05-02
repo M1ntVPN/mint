@@ -1,6 +1,6 @@
 [package]
 name = "mint"
-version = "0.2.4"
+version = "0.2.5"
 description = "Mint VPN — premium desktop client"
 authors = ["M1ntVPN"]
 license = "MIT"
