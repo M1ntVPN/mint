@@ -30,7 +30,7 @@ interface Props {
   state: ConnState;
   update?: { version: string; notes?: string } | null;
   updateBusy?: "idle" | "downloading" | "installing";
-  updateProgress?: { done: number; total: number } | null;
+  updateProgress?: { done: number; total: number; percent: number } | null;
   updateError?: string | null;
   onInstallUpdate?: () => void;
   onDismissUpdate?: () => void;
@@ -193,10 +193,7 @@ export function Sidebar({
                 <span className="text-[11px] text-white/55">
                   {updateBusy === "downloading"
                     ? updateProgress && updateProgress.total > 0
-                      ? `Загрузка · ${Math.min(
-                          100,
-                          Math.round((updateProgress.done / updateProgress.total) * 100)
-                        )}%`
+                      ? `Загрузка · ${updateProgress.percent}%`
                       : "Загрузка…"
                     : updateBusy === "installing"
                       ? "Установка…"
@@ -207,12 +204,10 @@ export function Sidebar({
             {updateBusy === "downloading" && updateProgress && updateProgress.total > 0 && (
               <div className="mt-2 h-1 rounded-full bg-white/[0.08] overflow-hidden">
                 <div
-                  className="h-full bg-accent-grad transition-all"
+                  className="h-full bg-accent-grad"
                   style={{
-                    width: `${Math.min(
-                      100,
-                      Math.round((updateProgress.done / updateProgress.total) * 100)
-                    )}%`,
+                    width: `${updateProgress.percent}%`,
+                    transition: "width 200ms linear",
                   }}
                 />
               </div>

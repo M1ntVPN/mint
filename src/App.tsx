@@ -58,9 +58,9 @@ function App() {
   const [updateBusy, setUpdateBusy] = useState<"idle" | "downloading" | "installing">(
     "idle"
   );
-  const [updateProgress, setUpdateProgress] = useState<{ done: number; total: number } | null>(
-    null
-  );
+  const [updateProgress, setUpdateProgress] = useState<
+    { done: number; total: number; percent: number } | null
+  >(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
@@ -663,16 +663,44 @@ function App() {
       setUpdateBusy("downloading");
       let downloaded = 0;
       let total = 0;
+      let lastPercent = 0;
+      let lastFlush = 0;
+      let scheduled = false;
+      const flush = () => {
+        scheduled = false;
+        lastFlush = performance.now();
+        const t = total > 0 ? total : downloaded;
+        if (t <= 0) return;
+        const raw = Math.min(100, Math.round((downloaded / t) * 100));
+        if (raw > lastPercent) lastPercent = raw;
+        setUpdateProgress({ done: downloaded, total: t, percent: lastPercent });
+      };
+      const schedule = () => {
+        if (scheduled) return;
+        const elapsed = performance.now() - lastFlush;
+        if (elapsed >= 50) {
+          flush();
+        } else {
+          scheduled = true;
+          setTimeout(flush, 50 - elapsed);
+        }
+      };
       await inst.downloadAndInstall((event) => {
         if (event.event === "Started") {
-          total = event.data?.contentLength ?? 0;
-          setUpdateProgress({ done: 0, total });
+          const cl = event.data?.contentLength ?? 0;
+          if (cl > total) total = cl;
+          downloaded = 0;
+          lastPercent = 0;
+          setUpdateProgress({ done: 0, total, percent: 0 });
+          lastFlush = performance.now();
         } else if (event.event === "Progress") {
-          downloaded += event.data?.chunkLength ?? 0;
-          setUpdateProgress({ done: downloaded, total });
+          const c = event.data?.chunkLength ?? 0;
+          if (c > 0) downloaded += c;
+          schedule();
         } else if (event.event === "Finished") {
           setUpdateBusy("installing");
-          setUpdateProgress({ done: total || downloaded, total: total || downloaded });
+          const final = total || downloaded;
+          setUpdateProgress({ done: final, total: final, percent: 100 });
         }
       });
       try {
