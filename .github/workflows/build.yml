@@ -144,12 +144,12 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart('v')
           $nsisDir = "src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
-          $sigFile = Get-ChildItem "$nsisDir/*-setup.nsis.zip.sig" | Select-Object -First 1
-          $zipFile = Get-ChildItem "$nsisDir/*-setup.nsis.zip" | Where-Object { $_.Name -notlike "*.sig" } | Select-Object -First 1
-          if (-not $sigFile) { Write-Error "No .nsis.zip.sig file found — is TAURI_SIGNING_PRIVATE_KEY set?"; exit 1 }
-          if (-not $zipFile) { Write-Error "No .nsis.zip file found"; exit 1 }
+          $sigFile = Get-ChildItem "$nsisDir/*${version}*-setup.exe.sig" | Select-Object -First 1
+          $exeFile = Get-ChildItem "$nsisDir/*${version}*-setup.exe" | Where-Object { $_.Name -notlike "*.sig" } | Select-Object -First 1
+          if (-not $sigFile) { Write-Error "No -setup.exe.sig file found — is TAURI_SIGNING_PRIVATE_KEY set?"; exit 1 }
+          if (-not $exeFile) { Write-Error "No -setup.exe file found"; exit 1 }
           $sig = (Get-Content -Raw -Path $sigFile.FullName).Trim()
-          $url = "https://github.com/M1ntVPN/mint/releases/download/$tag/$($zipFile.Name)"
+          $url = "https://github.com/M1ntVPN/mint/releases/download/$tag/$($exeFile.Name)"
           $body = [ordered]@{
             version = $version
             notes = "Mint VPN $version"
@@ -186,8 +186,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}-updater
           path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.nsis.zip
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.nsis.zip.sig
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe.sig
             latest.json
           if-no-files-found: error
 
@@ -219,6 +218,5 @@ jobs:
           files: |
             artifacts/mint-vpn-windows-installer/*.exe
             artifacts/mint-vpn-windows-portable/*.zip
-            artifacts/mint-vpn-windows-updater/*.nsis.zip
-            artifacts/mint-vpn-windows-updater/*.nsis.zip.sig
+            artifacts/mint-vpn-windows-updater/*.exe.sig
             artifacts/mint-vpn-windows-updater/latest.json
