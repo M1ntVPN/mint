@@ -60,7 +60,7 @@ internal object ServiceNotification {
         return NotificationCompat.Builder(service, CHANNEL_ID)
             .setContentTitle(profileName)
             .setContentText(statusText)
-            .setSmallIcon(android.R.drawable.stat_sys_vpn_ic)
+            .setSmallIcon(R.drawable.ic_mint_vpn)
             .setOngoing(true)
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
