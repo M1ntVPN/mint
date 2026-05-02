@@ -26,11 +26,26 @@ jobs:
             ext: nsis,portable
 
     env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Stage Tauri signing key (Windows)
+        if: matrix.platform == 'windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY_RAW: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY_RAW" ]; then
+            echo "No signing key configured; build will be unsigned."
+            exit 0
+          fi
+          KEY_PATH="$RUNNER_TEMP/tauri-signing.key"
+          printf '%s' "$TAURI_SIGNING_PRIVATE_KEY_RAW" > "$KEY_PATH"
+          BYTES=$(wc -c < "$KEY_PATH")
+          echo "Wrote signing key ($BYTES bytes) to $KEY_PATH"
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Setup Node
         uses: actions/setup-node@v4
