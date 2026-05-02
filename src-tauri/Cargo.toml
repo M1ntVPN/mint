@@ -16,11 +16,17 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["image-png"] }
+# tray-icon is gated to desktop via tauri's own cfg(desktop) — leaving it
+# in the base feature list is fine because the cargo metadata that
+# tauri-build's permission resolver walks needs to see every plugin
+# referenced from the desktop capability file.
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-os = "2"
 tauri-plugin-process = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-deep-link = "2"
 # Native clipboard access without browser permission prompts — the
 # web-API navigator.clipboard.readText() pops a consent dialog inside
 # the Tauri webview on Windows, which is jarring UX.
@@ -30,25 +36,19 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros", "time", "net", "io-util"] }
+tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros", "time", "net", "process", "io-util"] }
 once_cell = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip"] }
 
 [target.'cfg(desktop)'.dependencies]
-# tray-icon needs the system's notification area (Windows shell tray /
-# X11 status icon); it's not part of mobile windowing.
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
-# sing-box runs as a child process on desktop (we ship it as a sidecar
-# binary). On Android the kernel won't let unprivileged apps fork
-# arbitrary executables, so this whole pathway is desktop-only.
-tokio = { version = "1", features = ["process"] }
-tauri-plugin-shell = "2"
-tauri-plugin-deep-link = "2"
 # Launch-on-login. We don't actually use the plugin's `set_activation_policy`
 # path; the `enable()` / `disable()` commands handle the Windows registry
-# Run key + Linux .desktop autostart + macOS LaunchAgents for us.
+# Run key + Linux .desktop autostart + macOS LaunchAgents for us. The crate
+# itself doesn't compile for Android, so it stays target-gated.
 tauri-plugin-autostart = "2"
-# Updater is desktop-only — Play Store ships its own update channel.
+# Updater is desktop-only — Play Store ships its own update channel and the
+# Tauri updater plugin pulls in download/install paths that don't make
+# sense on Android.
 tauri-plugin-updater = "2"
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
