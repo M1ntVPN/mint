@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "mint"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "libc",
  "once_cell",
@@ -2425,6 +2425,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tokio",
+ "windows-sys 0.59.0",
  "winreg 0.52.0",
 ]
 

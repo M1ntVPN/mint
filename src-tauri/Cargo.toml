@@ -1,6 +1,6 @@
 [package]
 name = "mint"
-version = "0.2.2"
+version = "0.2.3"
 description = "Mint VPN — premium desktop client"
 authors = ["M1ntVPN"]
 license = "MIT"
@@ -58,6 +58,10 @@ libc = "0.2"
 # WinINet for WinHttpSetOption / IE proxy options + winreg for HKCU edits.
 # Both are tiny, no MSVC redist tail.
 winreg = "0.52"
+# Used for SetClassLongPtrW / DestroyIcon when swapping the live taskbar
+# icon at runtime — Tauri's set_icon only updates ICON_BIG / ICON_SMALL
+# via WM_SETICON, which is not picked up by the Windows taskbar grouping.
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 panic = "abort"

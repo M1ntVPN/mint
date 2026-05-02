@@ -36,6 +36,8 @@ fn perform_graceful_shutdown(app: &AppHandle) {
 
 mod commands;
 mod killswitch;
+#[cfg(windows)]
+mod platform;
 mod singbox;
 mod sysapps;
 mod sysproxy;
@@ -44,8 +46,8 @@ const TRAY_CONNECTED: &[u8] = include_bytes!("../icons/tray/tray-connected.png")
 const TRAY_CONNECTING: &[u8] = include_bytes!("../icons/tray/tray-connecting.png");
 const TRAY_DISCONNECTED: &[u8] = include_bytes!("../icons/tray/tray-disconnected.png");
 
-const WIN_ICON_SHIELD: &[u8] = include_bytes!("../icons/icon.png");
-const WIN_ICON_LEAF: &[u8] = include_bytes!("../icons/icon-leaf.png");
+const WIN_ICON_SHIELD: &[u8] = include_bytes!("../icons/icon-shield-256.png");
+const WIN_ICON_LEAF: &[u8] = include_bytes!("../icons/icon-leaf-256.png");
 
 #[tauri::command]
 fn set_window_icon(app: AppHandle, variant: String) -> Result<(), String> {
@@ -56,6 +58,8 @@ fn set_window_icon(app: AppHandle, variant: String) -> Result<(), String> {
     let img = Image::from_bytes(bytes).map_err(|e| e.to_string())?;
     if let Some(w) = app.get_webview_window("main") {
         w.set_icon(img).map_err(|e| e.to_string())?;
+        #[cfg(windows)]
+        platform::refresh_taskbar_icon(&w, bytes);
     }
     Ok(())
 }
