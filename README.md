@@ -20,6 +20,10 @@
 
 <br>
 
+<img src=".github/assets/dashboard.png" alt="Mint VPN — главный экран" width="820" />
+
+<br>
+
 </div>
 
 ---
