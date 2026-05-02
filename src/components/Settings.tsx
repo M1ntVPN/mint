@@ -11,6 +11,8 @@ import {
   Play,
   Globe,
   HelpCircle,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { PageHeader } from "./Profiles";
@@ -28,7 +30,8 @@ type CategoryKey =
   | "confirmations"
   | "security"
   | "network"
-  | "connection";
+  | "connection"
+  | "updates";
 
 const CATEGORIES: {
   key: CategoryKey;
@@ -41,9 +44,24 @@ const CATEGORIES: {
   { key: "security", label: "Безопасность", icon: ShieldCheck },
   { key: "network", label: "Сеть и DNS", icon: Globe },
   { key: "connection", label: "Соединение", icon: Wifi },
+  { key: "updates", label: "Обновления", icon: Sparkles },
 ];
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  onCheckForUpdates?: () => Promise<{ version: string } | "uptodate" | "error">;
+  onInstallUpdate?: () => void | Promise<void>;
+  availableUpdate?: { version: string; notes?: string } | null;
+  updateBusy?: "idle" | "downloading" | "installing";
+  updateError?: string | null;
+}
+
+export function SettingsPage({
+  onCheckForUpdates,
+  onInstallUpdate,
+  availableUpdate,
+  updateBusy = "idle",
+  updateError,
+}: SettingsPageProps = {}) {
   const [active, setActive] = useState<CategoryKey>("appearance");
 
   return (
@@ -105,6 +123,15 @@ export function SettingsPage() {
             {active === "security" && <SecuritySection />}
             {active === "network" && <NetworkSection />}
             {active === "connection" && <ConnectionSection />}
+            {active === "updates" && (
+              <UpdatesSection
+                onCheckForUpdates={onCheckForUpdates}
+                onInstallUpdate={onInstallUpdate}
+                availableUpdate={availableUpdate}
+                updateBusy={updateBusy}
+                updateError={updateError}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -534,5 +561,106 @@ function Toggle({
         )}
       />
     </button>
+  );
+}
+
+interface UpdatesSectionProps {
+  onCheckForUpdates?: () => Promise<{ version: string } | "uptodate" | "error">;
+  onInstallUpdate?: () => void | Promise<void>;
+  availableUpdate?: { version: string; notes?: string } | null;
+  updateBusy?: "idle" | "downloading" | "installing";
+  updateError?: string | null;
+}
+
+function UpdatesSection({
+  onCheckForUpdates,
+  onInstallUpdate,
+  availableUpdate,
+  updateBusy = "idle",
+  updateError,
+}: UpdatesSectionProps) {
+  const [currentVersion, setCurrentVersion] = useState<string>("");
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = (await invoke("app_version")) as { version: string };
+        setCurrentVersion(info.version);
+      } catch {
+      }
+    })();
+  }, []);
+
+  const onCheck = async () => {
+    if (!onCheckForUpdates) return;
+    setChecking(true);
+    setStatus(null);
+    try {
+      const result = await onCheckForUpdates();
+      if (result === "uptodate") setStatus("У вас установлена последняя версия.");
+      else if (result === "error") setStatus(null);
+      else setStatus(`Доступно обновление до ${result.version}.`);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <SectionCard icon={Sparkles} title="Обновления приложения">
+      <div className="flex items-center justify-between gap-4 py-3">
+        <div className="min-w-0">
+          <div className="text-[14px] text-white/90 font-medium">Текущая версия</div>
+          <div className="text-[12.5px] text-white/45 mt-0.5">
+            Mint VPN {currentVersion || "—"}
+          </div>
+        </div>
+        <button
+          onClick={onCheck}
+          disabled={checking || updateBusy !== "idle"}
+          className="shrink-0 h-9 px-4 inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.07] text-[12.5px] font-medium text-white/85 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw size={13} className={cn(checking && "animate-spin")} />
+          {checking ? "Проверка…" : "Проверить обновления"}
+        </button>
+      </div>
+
+      {(availableUpdate || status || updateError) && (
+        <div className="py-3 space-y-2">
+          {availableUpdate && (
+            <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-accent-soft border-accent-soft border">
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-white">
+                  Доступно обновление до {availableUpdate.version}
+                </div>
+                {availableUpdate.notes && (
+                  <div className="text-[12px] text-white/55 mt-1 whitespace-pre-line line-clamp-3">
+                    {availableUpdate.notes}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => onInstallUpdate?.()}
+                disabled={updateBusy !== "idle"}
+                className="shrink-0 h-8 px-3 rounded-lg bg-accent-grad shadow-accent-glow text-white text-[12.5px] font-medium hover:brightness-110 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {updateBusy === "downloading"
+                  ? "Скачивание…"
+                  : updateBusy === "installing"
+                    ? "Установка…"
+                    : "Обновить"}
+              </button>
+            </div>
+          )}
+          {!availableUpdate && status && (
+            <div className="text-[12.5px] text-white/55 px-1">{status}</div>
+          )}
+          {updateError && (
+            <div className="text-[12.5px] text-rose-300/90 px-1">{updateError}</div>
+          )}
+        </div>
+      )}
+    </SectionCard>
   );
 }

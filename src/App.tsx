@@ -55,6 +55,13 @@ function App() {
   const [down, setDown] = useState(0);
   const [up, setUp] = useState(0);
   const [update, setUpdate] = useState<{ version: string; notes?: string } | null>(null);
+  const [updateBusy, setUpdateBusy] = useState<"idle" | "downloading" | "installing">(
+    "idle"
+  );
+  const [updateProgress, setUpdateProgress] = useState<{ done: number; total: number } | null>(
+    null
+  );
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<boolean>(false);
@@ -617,42 +624,104 @@ function App() {
   }, []);
 
   const installUpdate = async () => {
+    const log = useLogs.getState().push;
+    const ts = () => new Date().toISOString().slice(11, 23);
+    setUpdateError(null);
+    setUpdateProgress(null);
+    type UpdateHandle = {
+      downloadAndInstall: (
+        cb?: (event: {
+          event: "Started" | "Progress" | "Finished";
+          data?: { contentLength?: number; chunkLength?: number };
+        }) => void
+      ) => Promise<void>;
+    };
     try {
-      let inst = updateRef.current as
-        | {
-            downloadAndInstall: () => Promise<void>;
-          }
-        | null;
+      let inst = updateRef.current as UpdateHandle | null;
       if (!inst) {
         const { check } = await import("@tauri-apps/plugin-updater");
         const r = await check();
         if (r) {
-          inst = r;
+          inst = r as UpdateHandle;
           updateRef.current = r;
         }
       }
       if (!inst) {
-        const { open } = await import("@tauri-apps/plugin-shell");
-        await open("https://github.com/M1ntVPN/mint/releases/latest");
+        setUpdateError("Не удалось получить информацию об обновлении.");
         return;
       }
       try {
         await invoke("prepare_for_update");
-      } catch {
+      } catch (e) {
+        log({
+          t: ts(),
+          lvl: "WARN",
+          src: "updater",
+          msg: `prepare_for_update failed: ${(e as Error)?.message ?? e}`,
+        });
       }
-      await inst.downloadAndInstall();
+      setUpdateBusy("downloading");
+      let downloaded = 0;
+      let total = 0;
+      await inst.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          total = event.data?.contentLength ?? 0;
+          setUpdateProgress({ done: 0, total });
+        } else if (event.event === "Progress") {
+          downloaded += event.data?.chunkLength ?? 0;
+          setUpdateProgress({ done: downloaded, total });
+        } else if (event.event === "Finished") {
+          setUpdateBusy("installing");
+          setUpdateProgress({ done: total || downloaded, total: total || downloaded });
+        }
+      });
       try {
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
-      } catch {
+      } catch (e) {
+        log({
+          t: ts(),
+          lvl: "WARN",
+          src: "updater",
+          msg: `relaunch failed: ${(e as Error)?.message ?? e}`,
+        });
       }
-    } catch {
-      try {
-        const { open } = await import("@tauri-apps/plugin-shell");
-        await open("https://github.com/M1ntVPN/mint/releases/latest");
-      } catch {
-        window.open("https://github.com/M1ntVPN/mint/releases/latest", "_blank");
-      }
+    } catch (e) {
+      const detail = typeof e === "string" ? e : (e as Error)?.message ?? "неизвестная ошибка";
+      setUpdateError(`Установка обновления не удалась: ${detail}`);
+      log({
+        t: ts(),
+        lvl: "ERR",
+        src: "updater",
+        msg: `installUpdate failed: ${detail}`,
+      });
+    } finally {
+      setUpdateBusy("idle");
+    }
+  };
+
+  const checkForUpdates = async (): Promise<{ version: string } | "uptodate" | "error"> => {
+    const log = useLogs.getState().push;
+    const ts = () => new Date().toISOString().slice(11, 23);
+    setUpdateError(null);
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const result = await check();
+      if (!result) return "uptodate";
+      updateRef.current = result;
+      const r = result as { version: string; body?: string | null };
+      setUpdate({ version: r.version, notes: r.body ?? undefined });
+      return { version: r.version };
+    } catch (e) {
+      const detail = typeof e === "string" ? e : (e as Error)?.message ?? "неизвестная ошибка";
+      setUpdateError(`Проверка обновлений не удалась: ${detail}`);
+      log({
+        t: ts(),
+        lvl: "ERR",
+        src: "updater",
+        msg: `checkForUpdates failed: ${detail}`,
+      });
+      return "error";
     }
   };
 
@@ -672,8 +741,12 @@ function App() {
           setPage={setPage}
           state={state}
           update={update}
+          updateBusy={updateBusy}
+          updateProgress={updateProgress}
+          updateError={updateError}
           onInstallUpdate={installUpdate}
           onDismissUpdate={() => setUpdate(null)}
+          onDismissUpdateError={() => setUpdateError(null)}
         />
 
         <main className="flex-1 relative overflow-hidden">
@@ -707,7 +780,15 @@ function App() {
                 />
               )}
               {page === "tunneling" && <TunnelingPage />}
-              {page === "settings" && <SettingsPage />}
+              {page === "settings" && (
+                <SettingsPage
+                  onCheckForUpdates={checkForUpdates}
+                  onInstallUpdate={installUpdate}
+                  availableUpdate={update}
+                  updateBusy={updateBusy}
+                  updateError={updateError}
+                />
+              )}
               {page === "logs" && <LogsPage />}
             </motion.div>
           </AnimatePresence>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Power,
@@ -8,6 +9,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { cn } from "../utils/cn";
 import { useTheme } from "../theme";
 import type { ConnState } from "../types";
@@ -27,13 +29,38 @@ interface Props {
   setPage: (p: PageKey) => void;
   state: ConnState;
   update?: { version: string; notes?: string } | null;
+  updateBusy?: "idle" | "downloading" | "installing";
+  updateProgress?: { done: number; total: number } | null;
+  updateError?: string | null;
   onInstallUpdate?: () => void;
   onDismissUpdate?: () => void;
+  onDismissUpdateError?: () => void;
 }
 
-export function Sidebar({ page, setPage, state, update, onInstallUpdate, onDismissUpdate }: Props) {
+export function Sidebar({
+  page,
+  setPage,
+  state,
+  update,
+  updateBusy = "idle",
+  updateProgress,
+  updateError,
+  onInstallUpdate,
+  onDismissUpdate,
+  onDismissUpdateError,
+}: Props) {
   const { iconVariant } = useTheme();
   const brandSrc = iconVariant === "leaf" ? "/mint-leaf.png" : "/mint-shield.png";
+  const [version, setVersion] = useState<string>("");
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = (await invoke("app_version")) as { version: string };
+        setVersion(info.version);
+      } catch {
+      }
+    })();
+  }, []);
   const haloColor =
     state === "connected"
       ? "from-emerald-500/20"
@@ -65,7 +92,7 @@ export function Sidebar({ page, setPage, state, update, onInstallUpdate, onDismi
           <div className="flex-1 flex flex-col items-center leading-tight min-w-0">
             <span className="text-[18px] font-bold tracking-tight text-white">Mint</span>
             <span className="text-[11.5px] tracking-tight text-white/55 mt-0.5 whitespace-nowrap">
-              VPN client · 1.0.0
+              VPN client{version ? ` · ${version}` : ""}
             </span>
           </div>
         </div>
@@ -117,35 +144,89 @@ export function Sidebar({ page, setPage, state, update, onInstallUpdate, onDismi
       <div className="flex-1" />
 
       <AnimatePresence>
-        {update && (
+        {updateError && (
           <motion.div
+            key="update-error"
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            className="relative mb-3 p-3 rounded-xl bg-rose-500/[0.07] border border-rose-400/30 overflow-hidden"
+          >
+            <button
+              onClick={onDismissUpdateError}
+              className="absolute top-1.5 right-1.5 w-6 h-6 grid place-items-center rounded-md text-white/40 hover:text-white hover:bg-white/[0.06] transition"
+              title="Скрыть"
+            >
+              <X size={12} />
+            </button>
+            <div className="flex flex-col leading-snug pr-5">
+              <span className="text-[12px] font-semibold text-rose-200">Ошибка обновления</span>
+              <span className="text-[11px] text-white/65 mt-1">{updateError}</span>
+            </div>
+          </motion.div>
+        )}
+        {update && !updateError && (
+          <motion.div
+            key="update-banner"
             initial={{ opacity: 0, y: 8, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ type: "spring", stiffness: 380, damping: 30 }}
             className="relative mb-3 p-3 rounded-xl bg-accent-soft border-accent-soft border overflow-hidden"
           >
-            <button
-              onClick={onDismissUpdate}
-              className="absolute top-1.5 right-1.5 w-6 h-6 grid place-items-center rounded-md text-white/40 hover:text-white hover:bg-white/[0.06] transition"
-              title="Скрыть"
-            >
-              <X size={12} />
-            </button>
+            {updateBusy === "idle" && (
+              <button
+                onClick={onDismissUpdate}
+                className="absolute top-1.5 right-1.5 w-6 h-6 grid place-items-center rounded-md text-white/40 hover:text-white hover:bg-white/[0.06] transition"
+                title="Скрыть"
+              >
+                <X size={12} />
+              </button>
+            )}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-accent-soft border-accent-soft border grid place-items-center text-accent">
                 <Sparkles size={14} />
               </div>
               <div className="flex flex-col leading-tight">
                 <span className="text-[12.5px] font-semibold text-white">Доступно {update.version}</span>
-                <span className="text-[11px] text-white/55">вышло обновление</span>
+                <span className="text-[11px] text-white/55">
+                  {updateBusy === "downloading"
+                    ? updateProgress && updateProgress.total > 0
+                      ? `Загрузка · ${Math.min(
+                          100,
+                          Math.round((updateProgress.done / updateProgress.total) * 100)
+                        )}%`
+                      : "Загрузка…"
+                    : updateBusy === "installing"
+                      ? "Установка…"
+                      : "вышло обновление"}
+                </span>
               </div>
             </div>
+            {updateBusy === "downloading" && updateProgress && updateProgress.total > 0 && (
+              <div className="mt-2 h-1 rounded-full bg-white/[0.08] overflow-hidden">
+                <div
+                  className="h-full bg-accent-grad transition-all"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.round((updateProgress.done / updateProgress.total) * 100)
+                    )}%`,
+                  }}
+                />
+              </div>
+            )}
             <button
               onClick={onInstallUpdate}
-              className="mt-2.5 w-full h-8 rounded-lg bg-accent-grad shadow-accent-glow text-white text-[12.5px] font-medium hover:brightness-110 active:scale-[0.98] transition"
+              disabled={updateBusy !== "idle"}
+              className="mt-2.5 w-full h-8 rounded-lg bg-accent-grad shadow-accent-glow text-white text-[12.5px] font-medium hover:brightness-110 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Обновить сейчас
+              {updateBusy === "downloading"
+                ? "Скачивание…"
+                : updateBusy === "installing"
+                  ? "Установка…"
+                  : "Обновить сейчас"}
             </button>
           </motion.div>
         )}
