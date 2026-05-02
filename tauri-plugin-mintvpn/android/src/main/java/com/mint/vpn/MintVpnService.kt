@@ -248,15 +248,32 @@ class MintVpnService :
                     }
                 }
 
-                val rx4 = options.inet4RouteExcludeAddress
-                while (rx4.hasNext()) {
-                    val rp = rx4.next()
-                    builder.excludeRoute(rp.address(), rp.prefix())
-                }
-                val rx6 = options.inet6RouteExcludeAddress
-                while (rx6.hasNext()) {
-                    val rp = rx6.next()
-                    builder.excludeRoute(rp.address(), rp.prefix())
+                // Exclude ranges (Android 13+): excludeRoute takes IpPrefix.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val rx4 = options.inet4RouteExcludeAddress
+                    while (rx4.hasNext()) {
+                        val rp = rx4.next()
+                        runCatching {
+                            builder.excludeRoute(
+                                android.net.IpPrefix(
+                                    java.net.InetAddress.getByName(rp.address()),
+                                    rp.prefix(),
+                                ),
+                            )
+                        }
+                    }
+                    val rx6 = options.inet6RouteExcludeAddress
+                    while (rx6.hasNext()) {
+                        val rp = rx6.next()
+                        runCatching {
+                            builder.excludeRoute(
+                                android.net.IpPrefix(
+                                    java.net.InetAddress.getByName(rp.address()),
+                                    rp.prefix(),
+                                ),
+                            )
+                        }
+                    }
                 }
             } else {
                 val r4 = options.inet4RouteRange
