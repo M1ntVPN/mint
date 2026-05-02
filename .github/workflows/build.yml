@@ -101,6 +101,13 @@ jobs:
           if ($dll) { Copy-Item $dll.FullName -Destination "$dest/wintun.dll" -Force }
           Get-ChildItem $dest
 
+      - name: Clean stale bundle output (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $bundle = "src-tauri/target/${{ matrix.target }}/release/bundle"
+          if (Test-Path $bundle) { Remove-Item -Recurse -Force $bundle }
+
       - name: Build Tauri app
         run: npm run tauri:build -- --target ${{ matrix.target }}
 
@@ -180,14 +187,25 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
+      - name: Stage updater bundle (Windows, on tag)
+        if: matrix.platform == 'windows' && startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $stage = "updater-stage"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          $nsisDir = "src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
+          Get-ChildItem "$nsisDir/*-setup.exe.sig" | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $stage -Force
+          }
+          Copy-Item -Path "latest.json" -Destination $stage -Force
+          Get-ChildItem $stage
+
       - name: Upload updater bundle (on tag)
         if: matrix.platform == 'windows' && startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}-updater
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe.sig
-            latest.json
+          path: updater-stage/*
           if-no-files-found: error
 
   release:
