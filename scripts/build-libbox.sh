@@ -3,7 +3,7 @@
 # into tauri-plugin-mintvpn/android/libs/.
 #
 # Required env (with sane defaults):
-#   SING_BOX_VERSION   sing-box ref to build (default: v1.12.4)
+#   SING_BOX_VERSION   sing-box ref to build (default: v1.13.11)
 #   ANDROID_API        gomobile -androidapi (default: 24)
 #
 # Required tooling on PATH:
@@ -12,7 +12,7 @@
 #   - Android SDK + NDK (ANDROID_HOME / ANDROID_NDK_HOME)
 set -euo pipefail
 
-SING_BOX_VERSION="${SING_BOX_VERSION:-v1.12.4}"
+SING_BOX_VERSION="${SING_BOX_VERSION:-v1.13.11}"
 ANDROID_API="${ANDROID_API:-24}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

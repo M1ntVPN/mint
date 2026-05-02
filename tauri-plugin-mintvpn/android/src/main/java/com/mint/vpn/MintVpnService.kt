@@ -132,7 +132,7 @@ class MintVpnService :
         startForegroundCompat()
         try {
             ensureLibboxSetup()
-            val server = Libbox.newCommandServer(this, this)
+            val server = CommandServer(this, this)
             server.start()
             server.startOrReloadService(config, OverrideOptions())
             commandServer = server
@@ -179,7 +179,6 @@ class MintVpnService :
             this.workingPath = workingPath
             this.tempPath = tempPath
             this.logMaxLines = 3000
-            this.crashReportSource = "MintVpnService"
         }
         Libbox.setup(opts)
         libboxInitialized = true
@@ -219,19 +218,18 @@ class MintVpnService :
             builder.addAddress(a.address(), a.prefix())
         }
 
-        // DNS — only honour when libbox says auto-route is on, otherwise the
-        // app's own DNS rules will leak.
         if (options.autoRoute) {
+            // sing-box always wants a DNS hijack address inside the TUN.
             try {
-                if (options.dnsMode != null && options.dnsMode.value != Libbox.DNSModeDisabled) {
-                    val dns = options.dnsServerAddress
-                    while (dns.hasNext()) {
-                        builder.addDnsServer(dns.next())
-                    }
+                val dns = options.dnsServerAddress
+                if (dns != null) {
+                    builder.addDnsServer(dns.value)
                 }
-            } catch (_: Throwable) { /* dnsMode is optional */ }
+            } catch (t: Throwable) {
+                Log.w(TAG, "no DNS server address from libbox", t)
+            }
 
-            // Routes
+            // Routes: prefer libbox-provided ranges, else fall back to default gateway.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val r4 = options.inet4RouteAddress
                 if (r4.hasNext()) {
@@ -249,6 +247,17 @@ class MintVpnService :
                         builder.addRoute(rp.address(), rp.prefix())
                     }
                 }
+
+                val rx4 = options.inet4RouteExcludeAddress
+                while (rx4.hasNext()) {
+                    val rp = rx4.next()
+                    builder.excludeRoute(rp.address(), rp.prefix())
+                }
+                val rx6 = options.inet6RouteExcludeAddress
+                while (rx6.hasNext()) {
+                    val rp = rx6.next()
+                    builder.excludeRoute(rp.address(), rp.prefix())
+                }
             } else {
                 val r4 = options.inet4RouteRange
                 if (r4.hasNext()) {
@@ -259,9 +268,14 @@ class MintVpnService :
                 } else {
                     builder.addRoute("0.0.0.0", 0)
                 }
+                val r6 = options.inet6RouteRange
+                while (r6.hasNext()) {
+                    val rp = r6.next()
+                    builder.addRoute(rp.address(), rp.prefix())
+                }
             }
         } else {
-            // Manual route mode — let libbox-supplied ranges drive everything.
+            // Manual route mode — use libbox-provided ranges as-is.
             val r4 = options.inet4RouteAddress
             while (r4.hasNext()) {
                 val rp = r4.next()
@@ -304,10 +318,6 @@ class MintVpnService :
 
     override fun setSystemProxyEnabled(enabled: Boolean) {
         // System proxy is desktop-only. Android delegates via per-app routing.
-    }
-
-    override fun triggerNativeCrash() {
-        // Used by sing-box debug tooling; not exposed to Mint UI.
     }
 
     override fun writeDebugMessage(message: String) {

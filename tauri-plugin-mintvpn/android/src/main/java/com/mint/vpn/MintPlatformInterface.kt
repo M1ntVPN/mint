@@ -4,23 +4,21 @@ import android.os.Build
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.LocalDNSTransport
-import io.nekohasekai.libbox.NeighborUpdateListener
 import io.nekohasekai.libbox.NetworkInterfaceIterator
 import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.StringIterator
-import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 
 /**
- * Default no-op implementations for [PlatformInterface] methods that Mint
- * does not need on Android. The two interesting callbacks — [openTun] and
- * [autoDetectInterfaceControl] — are still abstract; the [MintVpnService]
- * provides them.
+ * Default no-op implementations for [PlatformInterface] that Mint doesn't
+ * need on Android v1. The two interesting callbacks — [PlatformInterface.openTun]
+ * and [PlatformInterface.autoDetectInterfaceControl] — are still abstract;
+ * the [MintVpnService] provides them.
  *
  * `useProcFS` returns `true` on API < Q since `connectivity.getConnectionOwnerUid`
- * is unavailable there; everything else returns sane "not available" values
- * so libbox falls back to its built-in resolvers. This mirrors what SFA does
- * for the minimal/cellular-only path.
+ * is unavailable there. Everything else returns sane "not available" values
+ * so libbox falls back to its built-in resolvers. This mirrors what
+ * sing-box-for-android does for the minimal/cellular-only path.
  */
 interface MintPlatformDefaults : PlatformInterface {
 
@@ -35,9 +33,8 @@ interface MintPlatformDefaults : PlatformInterface {
         destinationAddress: String,
         destinationPort: Int,
     ): ConnectionOwner {
-        // Phase 2 doesn't ship per-app routing yet; tell libbox we don't know
-        // the connection owner. With useProcFS=false on API >= Q this method
-        // is also not invoked, so this is mostly a defensive stub.
+        // Phase 2 doesn't ship per-app routing yet; tell libbox we don't know.
+        // With useProcFS=false on API >= Q this method is also rarely invoked.
         throw UnsupportedOperationException("connection owner lookup not implemented")
     }
 
@@ -62,12 +59,6 @@ interface MintPlatformDefaults : PlatformInterface {
     override fun clearDNSCache() {}
 
     override fun sendNotification(notification: io.nekohasekai.libbox.Notification?) {}
-
-    override fun startNeighborMonitor(listener: NeighborUpdateListener?) {}
-
-    override fun closeNeighborMonitor(listener: NeighborUpdateListener?) {}
-
-    override fun registerMyInterface(name: String) {}
 
     override fun localDNSTransport(): LocalDNSTransport? = null
 }
