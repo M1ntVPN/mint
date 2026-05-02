@@ -6,6 +6,7 @@ import { ServersList } from "./ServersList";
 import { EmptyServersCard } from "./EmptyServersCard";
 import { useServers, type SavedServer } from "../store/servers";
 import type { ConnState, Server } from "../types";
+import { isMobile as isMobilePlatform } from "../utils/platform";
 
 interface Props {
   state: ConnState;
@@ -53,8 +54,14 @@ export function Dashboard(props: Props) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
+            className="relative"
           >
             <ConnectButton state={props.state} onClick={props.toggle} />
+            {isMobilePlatform() && (
+              <div className="mt-4 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-200 text-[12px] text-center">
+                VPN-движок на Android в разработке. UI работает, подключение — скоро.
+              </div>
+            )}
           </motion.div>
           <AnimatePresence>
             {props.connectError && (

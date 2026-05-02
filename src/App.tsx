@@ -23,6 +23,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "./store/settings";
 import { useTunneling, type AppRule, type AppFolder, type NetRule, type TunnelMode } from "./store/tunneling";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { MobileNav } from "./components/MobileNav";
+import { useIsMobile } from "./utils/useIsMobile";
+import { isMobile as isMobilePlatform } from "./utils/platform";
 
 function serializeTunnelingConfig(s: {
   mode: TunnelMode;
@@ -76,6 +79,7 @@ function App() {
 
   const autoConnectedRef = useRef(false);
   useEffect(() => {
+    if (isMobilePlatform()) return;
     if (autoConnectedRef.current) return;
     const vals = useSettingsStore.getState().values;
     if (vals["mint.autoConnect"] !== true) return;
@@ -333,6 +337,10 @@ function App() {
   };
 
   const toggle = async () => {
+    // Phase-1 mobile build: VPN engine isn't wired up yet (Android needs
+    // a `VpnService` + sing-box AAR, see Phase 2 in the Android plan).
+    // Until then the connect button is a no-op on mobile.
+    if (isMobilePlatform()) return;
     if (toggleInFlightRef.current) return;
     toggleInFlightRef.current = true;
     try {
@@ -606,6 +614,7 @@ function App() {
   const updateRef = useRef<unknown>(null);
 
   useEffect(() => {
+    if (isMobilePlatform()) return;
     let cancelled = false;
     (async () => {
       try {
@@ -624,6 +633,8 @@ function App() {
   }, []);
 
   const installUpdate = async () => {
+    // Auto-updates are desktop-only — Play Store ships its own update channel.
+    if (isMobilePlatform()) return;
     const log = useLogs.getState().push;
     const ts = () => new Date().toISOString().slice(11, 23);
     setUpdateError(null);
@@ -729,6 +740,7 @@ function App() {
   };
 
   const checkForUpdates = async (): Promise<{ version: string } | "uptodate" | "error"> => {
+    if (isMobilePlatform()) return "uptodate";
     const log = useLogs.getState().push;
     const ts = () => new Date().toISOString().slice(11, 23);
     setUpdateError(null);
@@ -757,25 +769,42 @@ function App() {
     ? savedServers.find((s) => s.id === pendingSwitchId) ?? null
     : null;
 
+  const isMobile = useIsMobile();
+
   return (
-    <div className="h-full w-full flex flex-col bg-ink-950 text-white relative overflow-hidden grain">
+    <div
+      className="h-full w-full flex flex-col bg-ink-950 text-white relative overflow-hidden grain"
+      style={
+        isMobile
+          ? { paddingTop: "env(safe-area-inset-top)" }
+          : undefined
+      }
+    >
       <AppBackground />
 
-      <TitleBar />
+      {!isMobile && <TitleBar />}
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <Sidebar
-          page={page}
-          setPage={setPage}
-          state={state}
-          update={update}
-          updateBusy={updateBusy}
-          updateProgress={updateProgress}
-          updateError={updateError}
-          onInstallUpdate={installUpdate}
-          onDismissUpdate={() => setUpdate(null)}
-          onDismissUpdateError={() => setUpdateError(null)}
-        />
+      <div
+        className={
+          isMobile
+            ? "flex flex-1 overflow-hidden relative flex-col"
+            : "flex flex-1 overflow-hidden relative"
+        }
+      >
+        {!isMobile && (
+          <Sidebar
+            page={page}
+            setPage={setPage}
+            state={state}
+            update={update}
+            updateBusy={updateBusy}
+            updateProgress={updateProgress}
+            updateError={updateError}
+            onInstallUpdate={installUpdate}
+            onDismissUpdate={() => setUpdate(null)}
+            onDismissUpdateError={() => setUpdateError(null)}
+          />
+        )}
 
         <main className="flex-1 relative overflow-hidden">
           <AnimatePresence mode="wait">
@@ -821,6 +850,8 @@ function App() {
             </motion.div>
           </AnimatePresence>
         </main>
+
+        {isMobile && <MobileNav page={page} setPage={setPage} />}
       </div>
 
       <ConfirmDialog
