@@ -1,5 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
 import App from "./App";
 import { ThemeProvider } from "./theme";
@@ -64,10 +66,34 @@ if (typeof window !== "undefined") {
   });
 }
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
-  </StrictMode>
-);
+function mount() {
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </StrictMode>
+  );
+}
+
+async function waitForFonts() {
+  if (typeof document === "undefined") return;
+  const fontSet = (document as Document & { fonts?: FontFaceSet }).fonts;
+  if (!fontSet) return;
+  try {
+    await Promise.race([
+      Promise.all([
+        fontSet.load("400 14px \"Inter Variable\""),
+        fontSet.load("500 14px \"Inter Variable\""),
+        fontSet.load("600 14px \"Inter Variable\""),
+        fontSet.load("700 14px \"Inter Variable\""),
+        fontSet.load("400 14px \"JetBrains Mono Variable\""),
+        fontSet.ready,
+      ]),
+      new Promise<void>((resolve) => setTimeout(resolve, 800)),
+    ]);
+  } catch {
+  }
+}
+
+waitForFonts().then(mount);
