@@ -600,12 +600,63 @@ function App() {
     };
   }, []);
 
+  const updateRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const result = await check();
+        if (cancelled || !result) return;
+        updateRef.current = result;
+        const r = result as { version: string; body?: string | null };
+        setUpdate({ version: r.version, notes: r.body ?? undefined });
+      } catch {
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const installUpdate = async () => {
     try {
-      const { open } = await import("@tauri-apps/plugin-shell");
-      await open("https://github.com/ether14l/mint/releases/latest");
+      let inst = updateRef.current as
+        | {
+            downloadAndInstall: () => Promise<void>;
+          }
+        | null;
+      if (!inst) {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const r = await check();
+        if (r) {
+          inst = r;
+          updateRef.current = r;
+        }
+      }
+      if (!inst) {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open("https://github.com/M1ntVPN/mint/releases/latest");
+        return;
+      }
+      try {
+        await invoke("prepare_for_update");
+      } catch {
+      }
+      await inst.downloadAndInstall();
+      try {
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      } catch {
+      }
     } catch {
-      window.open("https://github.com/ether14l/mint/releases/latest", "_blank");
+      try {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open("https://github.com/M1ntVPN/mint/releases/latest");
+      } catch {
+        window.open("https://github.com/M1ntVPN/mint/releases/latest", "_blank");
+      }
     }
   };
 

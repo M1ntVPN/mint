@@ -18,6 +18,13 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn prepare_for_update() {
+    singbox::kill_all_blocking();
+    let _ = sysproxy::sysproxy_clear();
+    killswitch::disable_blocking();
+}
+
 fn perform_graceful_shutdown(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -124,6 +131,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             #[cfg(any(windows, target_os = "linux"))]
             {
@@ -235,6 +243,7 @@ pub fn run() {
             set_window_icon,
             set_close_to_tray,
             quit_app,
+            prepare_for_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mint");
