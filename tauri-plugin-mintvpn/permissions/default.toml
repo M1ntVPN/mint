@@ -1,0 +1,8 @@
+[default]
+description = "Default permissions for the Mint VPN Android plugin: prepare/start/stop the system VPN tunnel and read its status."
+permissions = [
+  "allow-prepare-vpn",
+  "allow-start-vpn",
+  "allow-stop-vpn",
+  "allow-vpn-status",
+]

@@ -60,6 +60,14 @@ tauri-plugin-updater = "2"
 # for this, and Linux desktop entries call out to xdg-open).
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+# Mint's own Android plugin: drives `VpnService` + sing-box (libbox) so
+# the connect button works the same way it does on the desktop sidecar
+# build. The plugin is a no-op on iOS today (no Mint iOS target yet),
+# but the cfg gate keeps it mobile-only so the desktop crate graph
+# stays untouched.
+tauri-plugin-mintvpn = { path = "../tauri-plugin-mintvpn" }
+
 [target.'cfg(unix)'.dependencies]
 # geteuid() for the "user-owned process" filter (Linux: compare
 # /proc/<pid>/status UID against our own; macOS: compare `ps -o user=`

@@ -12,6 +12,7 @@
     "process:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "notification:default"
+    "notification:default",
+    "mintvpn:default"
   ]
 }

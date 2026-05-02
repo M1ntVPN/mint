@@ -269,6 +269,17 @@ function App() {
     });
     setState("connecting");
     try {
+      if (isMobilePlatform()) {
+        const { vpnPrepare } = await import("./utils/vpn");
+        const prep = await vpnPrepare();
+        if (!prep.granted) {
+          setState("disconnected");
+          const m = "Доступ к VPN не предоставлен. Откройте настройки Android и разрешите Mint работать как VPN.";
+          setConnectError(m);
+          log({ t: ts(), lvl: "WARN", src: "ui", msg: m });
+          return;
+        }
+      }
       await startEngine({ exit: realExit, entry });
       setHasRealEngine(true);
       setState("connected");
@@ -337,10 +348,6 @@ function App() {
   };
 
   const toggle = async () => {
-    // Phase-1 mobile build: VPN engine isn't wired up yet (Android needs
-    // a `VpnService` + sing-box AAR, see Phase 2 in the Android plan).
-    // Until then the connect button is a no-op on mobile.
-    if (isMobilePlatform()) return;
     if (toggleInFlightRef.current) return;
     toggleInFlightRef.current = true;
     try {
