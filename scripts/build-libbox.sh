@@ -39,8 +39,10 @@ export PATH="$GOPATH/bin:$PATH"
 
 gomobile init
 
-# Tags lifted from cmd/internal/build_libbox/main.go (android-main build):
-TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0,with_low_memory"
+# Tags follow sing-box's `legacy` android variant (cmd/internal/build_libbox)
+# minus tailscale: we don't use NaïveProxy or Tailscale outbounds, and dropping
+# them dodges a cronet C++ unwind-table mismatch with current NDK linkers.
+TAGS="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,badlinkname,tfogo_checklinkname0,with_low_memory"
 
 LDFLAGS="-X github.com/sagernet/sing-box/constant.Version=${SING_BOX_VERSION#v} -X internal/godebug.defaultGODEBUG=multipathtcp=0 -s -w -buildid= -checklinkname=0"
 
