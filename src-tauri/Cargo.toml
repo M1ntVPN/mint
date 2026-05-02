@@ -40,15 +40,18 @@ tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros", 
 once_cell = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip"] }
 
-[target.'cfg(desktop)'.dependencies]
+# NOTE: cargo's dependency resolver doesn't know about cfg(desktop)
+# (which is set by tauri-build at compile-time, after metadata resolution),
+# so target-gating with cfg(desktop) breaks the build script's permission
+# resolver: it walks cargo metadata and can't find plugins listed under
+# [target.'cfg(desktop)'.dependencies]. Use explicit target_os predicates
+# for desktop-only crates instead.
+[target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
 # Launch-on-login. We don't actually use the plugin's `set_activation_policy`
 # path; the `enable()` / `disable()` commands handle the Windows registry
-# Run key + Linux .desktop autostart + macOS LaunchAgents for us. The crate
-# itself doesn't compile for Android, so it stays target-gated.
+# Run key + Linux .desktop autostart + macOS LaunchAgents for us.
 tauri-plugin-autostart = "2"
-# Updater is desktop-only — Play Store ships its own update channel and the
-# Tauri updater plugin pulls in download/install paths that don't make
-# sense on Android.
+# Updater is desktop-only — Play Store ships its own update channel.
 tauri-plugin-updater = "2"
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
