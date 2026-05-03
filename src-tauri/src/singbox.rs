@@ -57,11 +57,49 @@ fn resolve_sing_box_binary(app: &AppHandle) -> Option<std::path::PathBuf> {
     None
 }
 
+#[cfg(windows)]
+fn ensure_wintun_dll(app: &AppHandle) {
+    // sing-box's TUN inbound on Windows requires wintun.dll in a location
+    // searchable by LoadLibrary — typically the same directory as the
+    // sing-box.exe sidecar. The Tauri NSIS bundler stages wintun.dll under
+    // <install_dir>/resources/, so on first run we copy it next to
+    // sing-box.exe if it isn't already there.
+    let Ok(exe) = std::env::current_exe() else { return };
+    let Some(install_dir) = exe.parent() else { return };
+    let target = install_dir.join("wintun.dll");
+    if target.is_file() {
+        return;
+    }
+    let candidates: Vec<std::path::PathBuf> = {
+        let mut v = Vec::new();
+        if let Ok(res) = app.path().resource_dir() {
+            v.push(res.join("wintun.dll"));
+            v.push(res.join("binaries").join("wintun.dll"));
+        }
+        v.push(install_dir.join("resources").join("wintun.dll"));
+        v.push(install_dir.join("resources").join("binaries").join("wintun.dll"));
+        v
+    };
+    for src in candidates {
+        if src.is_file() {
+            if let Err(e) = std::fs::copy(&src, &target) {
+                eprintln!("ensure_wintun_dll: copy {src:?} -> {target:?} failed: {e}");
+            }
+            break;
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn ensure_wintun_dll(_app: &AppHandle) {}
+
 #[tauri::command]
 pub async fn singbox_start(app: AppHandle, config: String) -> Result<(), String> {
     if CHILD.lock().map_err(|e| e.to_string())?.is_some() {
         return Err("sing-box уже запущен".to_string());
     }
+
+    ensure_wintun_dll(&app);
 
     let base = app
         .path()

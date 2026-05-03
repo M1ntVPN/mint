@@ -563,7 +563,7 @@ function Toggle({
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
         className={cn(
           "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow",
-          value ? "left-5" : "left-0.5"
+          value ? "right-0.5" : "left-0.5"
         )}
       />
     </button>
