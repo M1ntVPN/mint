@@ -56,11 +56,10 @@ const card: Variants = {
 };
 
 const icon: Variants = {
-  hidden: { scale: 0.4, opacity: 0 },
+  hidden: { opacity: 0 },
   show: {
-    scale: 1,
     opacity: 1,
-    transition: { type: "spring", stiffness: 400, damping: 18, delay: 0.08 },
+    transition: { duration: 0.28, ease: [0.2, 0.8, 0.2, 1], delay: 0.08 },
   },
 };
 
@@ -127,7 +126,10 @@ export function StatsCards({ state, uptime, ping, down, up }: Props) {
               }
             />
             <div className="relative flex items-center gap-2 text-[12.5px] text-white/55 mb-1.5">
-              <motion.span variants={icon} className="inline-flex">
+              <motion.span
+                variants={icon}
+                className="inline-flex items-center justify-center w-[18px] h-[18px] shrink-0"
+              >
                 <Icon
                   size={18}
                   className={it.color}
