@@ -11,7 +11,7 @@
 
 <h1>Mint VPN</h1>
 
-<h4>Fast. Private. Beautiful.<br>A premium VPN client for Windows.</h4>
+<h4>Fast. Private. Beautiful.<br>A premium VPN client for Windows &amp; Android.</h4>
 
 <br>
 
@@ -27,6 +27,12 @@
 
 <br>
 <br>
+
+<a href="https://github.com/M1ntVPN/mint"><img src="https://img.shields.io/github/stars/M1ntVPN/mint?style=flat-square&color=f59e0b&label=Stars" alt="Stars" /></a>
+<a href="https://github.com/M1ntVPN/mint/network/members"><img src="https://img.shields.io/github/forks/M1ntVPN/mint?style=flat-square&color=8b5cf6&label=Forks" alt="Forks" /></a>
+<a href="https://github.com/M1ntVPN/mint/issues"><img src="https://img.shields.io/github/issues/M1ntVPN/mint?style=flat-square&color=ef4444&label=Issues" alt="Issues" /></a>
+<a href="https://github.com/M1ntVPN/mint/commits/main"><img src="https://img.shields.io/github/last-commit/M1ntVPN/mint?style=flat-square&color=22d3ee&label=Last%20Commit" alt="Last Commit" /></a>
+<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/M1ntVPN/mint/build.yml?style=flat-square&label=Build" alt="Build Status" /></a>
 
 <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri_2-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri 2" /></a>
 <a href="https://react.dev"><img src="https://img.shields.io/badge/React_19-61dafb?style=flat-square&logo=react&logoColor=black" alt="React 19" /></a>
@@ -94,26 +100,42 @@ Minimize to system tray, launch on Windows startup, native notifications.
 
 <div align="center">
 
-> **Windows 10** (1809+) or **Windows 11** &mdash; x64
+<table>
+<tr>
+<th align="center">Platform</th>
+<th align="center">Download</th>
+<th align="center">Requirements</th>
+</tr>
+<tr>
+<td align="center">
+<img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows11&logoColor=white" alt="Windows" />
+</td>
+<td align="center">
+<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml"><img src="https://img.shields.io/badge/Installer-NSIS%20.exe-0078D6?style=for-the-badge" alt="Installer" /></a>&ensp;<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml"><img src="https://img.shields.io/badge/Portable-ZIP-6366f1?style=for-the-badge" alt="Portable" /></a>
+</td>
+<td align="center">Windows 10 (1809+) / 11, x64</td>
+</tr>
+<tr>
+<td align="center">
+<img src="https://img.shields.io/badge/Android-34A853?style=flat-square&logo=android&logoColor=white" alt="Android" />
+</td>
+<td align="center">
+<img src="https://img.shields.io/badge/Coming%20Soon-APK-34A853?style=for-the-badge" alt="Coming Soon" />
+</td>
+<td align="center">Android 7.0+ (API 24)</td>
+</tr>
+</table>
 
 <br>
 
 <a href="https://getmint.club">
-  <img src="https://img.shields.io/badge/&#x1F310;%20Website-getmint.club-8b5cf6?style=for-the-badge" alt="Website" />
-</a>
-&emsp;
-<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml">
-  <img src="https://img.shields.io/badge/&#x2B07;&#xFE0F;%20Installer-NSIS%20Setup%20(.exe)-0078D6?style=for-the-badge" alt="Installer" />
-</a>
-&emsp;
-<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml">
-  <img src="https://img.shields.io/badge/&#x1F4E6;%20Portable-ZIP%20Archive-6366f1?style=for-the-badge" alt="Portable" />
+<img src="https://img.shields.io/badge/&#x1F310;%20Visit-getmint.club-8b5cf6?style=for-the-badge" alt="Website" />
 </a>
 
 <br>
 <br>
 
-<sub>Download artifacts from the latest successful CI build, or visit <a href="https://getmint.club"><b>getmint.club</b></a></sub>
+<sub>Windows builds available in <a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml">CI artifacts</a> &middot; Android APK coming soon &middot; <a href="https://getmint.club"><b>getmint.club</b></a></sub>
 
 </div>
 
@@ -137,6 +159,7 @@ Minimize to system tray, launch on Windows startup, native notifications.
 | **Desktop shell** | [Tauri 2](https://tauri.app) &mdash; Rust |
 | **Frontend** | [React 19](https://react.dev) &middot; Framer Motion &middot; Tailwind v4 &middot; Zustand |
 | **VPN core** | [sing-box](https://github.com/SagerNet/sing-box) sidecar |
+| **Mobile** | Tauri 2 Android &middot; Kotlin &middot; VpnService |
 | **Tooling** | Vite 7 &middot; TypeScript 5.9 &middot; Cargo |
 | **Installer** | NSIS &mdash; EN / RU language selector, LZMA compression |
 
