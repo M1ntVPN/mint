@@ -48,16 +48,17 @@ android {
             }
         }
         getByName("release") {
-            isMinifyEnabled = true
+            // R8 keeps stripping classes that libbox/Tauri load via reflection
+            // even with broad keep rules, which manifests as
+            // ClassNotFoundException at startup on some emulators (Nox). Until
+            // we have a comprehensive R8 ruleset that survives a real device
+            // matrix, ship release builds without minification — the size
+            // overhead (~5-10 MB on a 195 MB APK) is acceptable.
+            isMinifyEnabled = false
             val releaseSigning = signingConfigs.findByName("release")
             if (releaseSigning != null) {
                 signingConfig = releaseSigning
             }
-            proguardFiles(
-                *fileTree(".") { include("**/*.pro") }
-                    .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
-                    .toList().toTypedArray()
-            )
         }
     }
     kotlinOptions {
@@ -65,6 +66,15 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    packaging {
+        jniLibs {
+            // Older Android (API 24-25, including some Nox builds) and a few
+            // OEM ROMs choke on uncompressed shared libraries (the modern
+            // default) when the APK is sideloaded. Force-extract native libs
+            // so libbox.so / libmint_lib.so are guaranteed to load.
+            useLegacyPackaging = true
+        }
     }
 }
 
