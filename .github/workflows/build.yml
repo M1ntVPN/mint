@@ -4,7 +4,9 @@ on:
   push:
     branches: [main, dev, "feat/**"]
     tags:
-      - "v*"
+      # Desktop releases use plain semver tags; Android uses `v*-android`,
+      # which has its own workflow and must not trigger this one.
+      - "v[0-9]*.[0-9]*.[0-9]*"
   pull_request:
   workflow_dispatch:
 
@@ -14,6 +16,7 @@ permissions:
 jobs:
   build:
     name: Build (${{ matrix.platform }})
+    if: "!endsWith(github.ref, '-android')"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -233,6 +236,10 @@ jobs:
           name: Mint VPN ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # Always promote desktop releases to "Latest" so /releases/latest
+          # resolves to the manifest the Windows auto-updater downloads.
+          make_latest: "true"
+          prerelease: false
           files: |
             artifacts/mint-vpn-windows-installer/*.exe
             artifacts/mint-vpn-windows-portable/*.zip
