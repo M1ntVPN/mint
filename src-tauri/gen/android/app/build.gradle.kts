@@ -64,6 +64,16 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    compileOptions {
+        // Backport java.lang.invoke.* (BootstrapMethodError, MethodHandle,
+        // etc.) onto API 24/25. The default Android runtime added these in
+        // API 26 (Oreo). PluginManager / Tauri / Kotlin-generated code
+        // reference them via invokedynamic, so without desugaring the app
+        // crashes at startup on Android 7.x with NoClassDefFoundError.
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
     buildFeatures {
         buildConfig = true
     }
@@ -87,6 +97,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
