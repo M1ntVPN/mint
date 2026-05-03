@@ -42,8 +42,6 @@
       "icons/icon.ico",
       "icons/icon.icns"
     ],
-    "externalBin": ["binaries/sing-box"],
-    "resources": ["binaries/wintun.dll"],
     "publisher": "Mint VPN",
     "shortDescription": "Mint VPN",
     "longDescription": "Mint VPN — premium desktop client",
