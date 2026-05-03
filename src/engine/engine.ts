@@ -88,6 +88,27 @@ export async function startEngine(opts: StartOptions): Promise<void> {
     } catch (e) {
       console.warn("sysproxy_set failed", e);
     }
+    // Race guard — if sing-box died between vpnStart() returning and us
+    // setting the system proxy (e.g. config error caught only at runtime),
+    // the singbox-exit listener already ran sysproxy_clear *before* our
+    // set, leaving the registry pointing at 127.0.0.1:7890 with no engine
+    // behind it. Verify the child is still alive and reverse the set if
+    // not, so the user's internet doesn't get silently routed into a
+    // dead localhost listener.
+    try {
+      const stillRunning = await invoke<boolean>("singbox_running");
+      if (!stillRunning) {
+        try {
+          await invoke("sysproxy_clear");
+        } catch {
+        }
+        throw new Error(
+          "sing-box завершился сразу после старта (см. логи)"
+        );
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("sing-box")) throw e;
+    }
   }
 }
 
