@@ -2,6 +2,7 @@
 import type { SavedServer } from "../store/servers";
 import type { AppRule, NetRule, TunnelMode } from "../store/tunneling";
 import { parseShareUri, type SingboxOutbound } from "./uriParser";
+import { isAndroid } from "../utils/platform";
 
 interface TunnelingSnapshot {
   mode: TunnelMode;
@@ -126,14 +127,28 @@ export function buildSingboxConfig(opts: BuildOptions): string {
       ],
       strategy: "prefer_ipv4",
     },
-    inbounds: [
-      {
-        type: "mixed",
-        tag: "mixed-in",
-        listen: "127.0.0.1",
-        listen_port: MIXED_INBOUND_PORT,
-      },
-    ],
+    inbounds: isAndroid()
+      ? [
+          {
+            type: "tun",
+            tag: "tun-in",
+            auto_route: true,
+            strict_route: true,
+            inet4_address: "172.19.0.1/30",
+            inet6_address: "fdfe:dcba:9876::1/126",
+            stack: "mixed",
+            sniff: true,
+            sniff_override_destination: true,
+          },
+        ]
+      : [
+          {
+            type: "mixed",
+            tag: "mixed-in",
+            listen: "127.0.0.1",
+            listen_port: MIXED_INBOUND_PORT,
+          },
+        ],
     outbounds: [
       ...proxyOutbounds,
       { type: "direct", tag: "direct" },
