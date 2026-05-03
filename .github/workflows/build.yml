@@ -16,7 +16,10 @@ permissions:
 jobs:
   build:
     name: Build (${{ matrix.platform }})
-    if: "!endsWith(github.ref, '-android')"
+    # Only skip when the ref is a tag ending in -android (Android release).
+    # Branch names that happen to end in '-android' (e.g. work branches) must
+    # still run desktop CI.
+    if: "!(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref, '-android'))"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
