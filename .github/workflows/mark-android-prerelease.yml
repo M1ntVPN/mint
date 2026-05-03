@@ -1,0 +1,32 @@
+name: Mark Android releases as pre-release
+
+# Without this, an Android release published in the GitHub UI accidentally
+# becomes the repo's "latest" release. The Windows auto-updater fetches
+# https://github.com/.../releases/latest/download/latest.json, so an Android
+# release without that asset would 404 every Windows client. Auto-flip any
+# release whose tag ends in -android to pre-release so /releases/latest keeps
+# resolving to the Windows manifest.
+
+on:
+  release:
+    types: [published, released, edited]
+
+permissions:
+  contents: write
+
+jobs:
+  mark-prerelease:
+    if: endsWith(github.event.release.tag_name, '-android') && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark release as pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          echo "Marking ${TAG} (id=${RELEASE_ID}) as pre-release"
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -f prerelease=true \
+            --silent
+          echo "Done. /releases/latest will skip this release going forward."
