@@ -34,7 +34,7 @@ fn quit_app(app: AppHandle) {
 #[tauri::command]
 fn prepare_for_update() {
     singbox::kill_all_blocking();
-    let _ = sysproxy::sysproxy_clear();
+    sysproxy::sysproxy_clear_blocking();
     killswitch::disable_blocking();
 }
 
@@ -44,7 +44,7 @@ fn perform_graceful_shutdown(app: &AppHandle) {
         let _ = w.hide();
     }
     singbox::kill_all_blocking();
-    let _ = sysproxy::sysproxy_clear();
+    sysproxy::sysproxy_clear_blocking();
     killswitch::disable_blocking();
 }
 
@@ -172,6 +172,13 @@ fn run_desktop() {
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Restore the user's pre-Mint proxy settings if a previous Mint
+            // session crashed mid-tunnel and left a stale 127.0.0.1:7890
+            // entry in HKCU IE Settings. Runs *before* the webview loads
+            // so the user gets their internet back even if the React app
+            // never reaches the JS-side cleanup.
+            sysproxy::restore_orphan_snapshot_at_startup(&app.handle());
+
             #[cfg(any(windows, target_os = "linux"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -272,6 +279,7 @@ fn run_desktop() {
             singbox::singbox_pick_free_clash_port,
             sysproxy::sysproxy_set,
             sysproxy::sysproxy_clear,
+            sysproxy::sysproxy_clear_if_local,
             sysapps::list_installed_apps,
             sysapps::list_running_processes,
             sysapps::scan_folder_exes,

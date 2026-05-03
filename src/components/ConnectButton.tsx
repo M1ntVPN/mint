@@ -102,8 +102,8 @@ export function ConnectButton({ state, onClick }: Props) {
   }, [outerAngle, innerAngle, outerSpeed, innerSpeed]);
 
   return (
-    <div className="flex flex-col items-center gap-5">
-      <div className="relative w-[200px] h-[200px] grid place-items-center">
+    <div className="flex flex-col items-center gap-5 max-[720px]:gap-3.5">
+      <div className="relative w-[200px] h-[200px] grid place-items-center max-[720px]:w-[160px] max-[720px]:h-[160px]">
         {!isOn && (
           <motion.div
             style={{ rotate: outerAngle }}
@@ -159,7 +159,7 @@ export function ConnectButton({ state, onClick }: Props) {
           whileHover={{ scale: 1.03 }}
           transition={{ type: "spring", stiffness: 320, damping: 22 }}
           className={cn(
-            "relative w-[150px] h-[150px] rounded-full grid place-items-center transition-colors duration-500",
+            "relative w-[150px] h-[150px] rounded-full grid place-items-center transition-colors duration-500 max-[720px]:w-[124px] max-[720px]:h-[124px]",
             "bg-gradient-to-br",
             isOn
               ? "from-emerald-300 via-emerald-500 to-emerald-700 mint-pulse"

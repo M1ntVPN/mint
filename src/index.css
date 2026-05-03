@@ -43,6 +43,15 @@
     /* Base scale — Tailwind rem-based sizes scale with this. */
     font-size: 18px;
   }
+  /* Mobile / Android: the 18px base inflates every padding and rem-sized
+     control until the dashboard barely fits a 360–412 dp viewport. Drop
+     to a stock 16px so paddings, nav heights, and stats card density
+     match what Material-style apps look like on Android. */
+  @media (max-width: 720px) {
+    html {
+      font-size: 16px;
+    }
+  }
   html, body, #root {
     height: 100%;
     background: var(--bg-base);

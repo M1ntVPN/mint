@@ -106,7 +106,7 @@ export function StatsCards({ state, uptime, ping, down, up }: Props) {
 
   return (
     <motion.div
-      className="grid grid-cols-4 gap-2.5"
+      className="grid grid-cols-4 gap-2.5 max-[720px]:grid-cols-2 max-[720px]:gap-2"
       variants={container}
       initial="hidden"
       animate="show"
@@ -117,7 +117,7 @@ export function StatsCards({ state, uptime, ping, down, up }: Props) {
           <motion.div
             key={it.label}
             variants={card}
-            className="glass rounded-xl px-3.5 py-2.5 select-none relative overflow-hidden"
+            className="glass rounded-xl px-3.5 py-2.5 select-none relative overflow-hidden max-[720px]:px-3 max-[720px]:py-2"
           >
             <div
               className={
