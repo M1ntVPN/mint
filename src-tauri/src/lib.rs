@@ -1,12 +1,23 @@
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::image::Image;
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Listener, Manager, WindowEvent};
+use tauri::AppHandle;
 
+#[cfg(desktop)]
+use tauri::Manager;
+#[cfg(desktop)]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(desktop)]
+use tauri::image::Image;
+#[cfg(desktop)]
+use tauri::menu::{Menu, MenuItem};
+#[cfg(desktop)]
+use tauri::tray::TrayIconBuilder;
+#[cfg(desktop)]
+use tauri::{Emitter, Listener, WindowEvent};
+
+#[cfg(desktop)]
 static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(true);
 
+#[cfg(desktop)]
 #[tauri::command]
 fn set_close_to_tray(enabled: bool) {
     CLOSE_TO_TRAY.store(enabled, Ordering::SeqCst);
@@ -14,10 +25,12 @@ fn set_close_to_tray(enabled: bool) {
 
 #[tauri::command]
 fn quit_app(app: AppHandle) {
+    #[cfg(desktop)]
     perform_graceful_shutdown(&app);
     app.exit(0);
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn prepare_for_update() {
     singbox::kill_all_blocking();
@@ -25,6 +38,7 @@ fn prepare_for_update() {
     killswitch::disable_blocking();
 }
 
+#[cfg(desktop)]
 fn perform_graceful_shutdown(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -35,20 +49,30 @@ fn perform_graceful_shutdown(app: &AppHandle) {
 }
 
 mod commands;
+#[cfg(desktop)]
 mod killswitch;
 #[cfg(windows)]
 mod platform;
+#[cfg(desktop)]
 mod singbox;
+#[cfg(desktop)]
 mod sysapps;
+#[cfg(desktop)]
 mod sysproxy;
 
+#[cfg(desktop)]
 const TRAY_CONNECTED: &[u8] = include_bytes!("../icons/tray/tray-connected.png");
+#[cfg(desktop)]
 const TRAY_CONNECTING: &[u8] = include_bytes!("../icons/tray/tray-connecting.png");
+#[cfg(desktop)]
 const TRAY_DISCONNECTED: &[u8] = include_bytes!("../icons/tray/tray-disconnected.png");
 
+#[cfg(desktop)]
 const WIN_ICON_SHIELD: &[u8] = include_bytes!("../icons/icon-shield-256.png");
+#[cfg(desktop)]
 const WIN_ICON_LEAF: &[u8] = include_bytes!("../icons/icon-leaf-256.png");
 
+#[cfg(desktop)]
 #[tauri::command]
 fn set_window_icon(app: AppHandle, variant: String) -> Result<(), String> {
     let bytes: &[u8] = match variant.as_str() {
@@ -64,6 +88,7 @@ fn set_window_icon(app: AppHandle, variant: String) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(desktop)]
 fn icon_for(state: &str) -> Image<'static> {
     let bytes: &[u8] = match state {
         "connected" => TRAY_CONNECTED,
@@ -73,6 +98,7 @@ fn icon_for(state: &str) -> Image<'static> {
     Image::from_bytes(bytes).expect("tray icon bytes are valid PNG")
 }
 
+#[cfg(desktop)]
 fn show_main_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -81,6 +107,7 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
+#[cfg(desktop)]
 fn handle_deep_links(app: &AppHandle, urls: &[String]) {
     if urls.is_empty() {
         return;
@@ -97,6 +124,14 @@ fn handle_deep_links(app: &AppHandle, urls: &[String]) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(desktop)]
+    run_desktop();
+    #[cfg(mobile)]
+    run_mobile();
+}
+
+#[cfg(desktop)]
+fn run_desktop() {
     let mut builder = tauri::Builder::default();
 
     #[cfg(any(windows, target_os = "linux"))]
@@ -248,6 +283,32 @@ pub fn run() {
             set_close_to_tray,
             quit_app,
             prepare_for_update,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running mint");
+}
+
+#[cfg(mobile)]
+fn run_mobile() {
+    // Phase 2 mobile build: real VPN tunneling on Android via VpnService +
+    // sing-box (libbox.aar). The Tauri plugin `tauri-plugin-mintvpn` exposes
+    // prepare_vpn / start_vpn / stop_vpn / vpn_status to the JS layer; the
+    // UI on Android calls these instead of the desktop sing-box sidecar.
+    // Tray, autostart, updater, sysproxy, killswitch remain desktop-only.
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_mintvpn::init())
+        .invoke_handler(tauri::generate_handler![
+            commands::app_version,
+            commands::is_elevated,
+            commands::ping_test,
+            commands::fetch_subscription,
+            quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mint");

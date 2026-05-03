@@ -7,6 +7,7 @@ import { EmptyServersCard } from "./EmptyServersCard";
 import { useServers, type SavedServer } from "../store/servers";
 import type { ConnState, Server } from "../types";
 
+
 interface Props {
   state: ConnState;
   toggle: () => void;
@@ -53,6 +54,7 @@ export function Dashboard(props: Props) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
+            className="relative"
           >
             <ConnectButton state={props.state} onClick={props.toggle} />
           </motion.div>

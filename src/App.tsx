@@ -23,6 +23,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "./store/settings";
 import { useTunneling, type AppRule, type AppFolder, type NetRule, type TunnelMode } from "./store/tunneling";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { MobileNav } from "./components/MobileNav";
+import { useIsMobile } from "./utils/useIsMobile";
+import { isMobile as isMobilePlatform } from "./utils/platform";
 
 function serializeTunnelingConfig(s: {
   mode: TunnelMode;
@@ -58,9 +61,9 @@ function App() {
   const [updateBusy, setUpdateBusy] = useState<"idle" | "downloading" | "installing">(
     "idle"
   );
-  const [updateProgress, setUpdateProgress] = useState<{ done: number; total: number } | null>(
-    null
-  );
+  const [updateProgress, setUpdateProgress] = useState<
+    { done: number; total: number; percent: number } | null
+  >(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
@@ -76,6 +79,7 @@ function App() {
 
   const autoConnectedRef = useRef(false);
   useEffect(() => {
+    if (isMobilePlatform()) return;
     if (autoConnectedRef.current) return;
     const vals = useSettingsStore.getState().values;
     if (vals["mint.autoConnect"] !== true) return;
@@ -168,7 +172,9 @@ function App() {
   useEffect(() => {
     if (didProxyCleanRef.current) return;
     didProxyCleanRef.current = true;
-    invoke("sysproxy_clear").catch(() => undefined);
+    if (!isMobilePlatform()) {
+      invoke("sysproxy_clear").catch(() => undefined);
+    }
   }, []);
 
   const didPlaceholderPurgeRef = useRef(false);
@@ -265,6 +271,17 @@ function App() {
     });
     setState("connecting");
     try {
+      if (isMobilePlatform()) {
+        const { vpnPrepare } = await import("./utils/vpn");
+        const prep = await vpnPrepare();
+        if (!prep.granted) {
+          setState("disconnected");
+          const m = "Доступ к VPN не предоставлен. Откройте настройки Android и разрешите Mint работать как VPN.";
+          setConnectError(m);
+          log({ t: ts(), lvl: "WARN", src: "ui", msg: m });
+          return;
+        }
+      }
       await startEngine({ exit: realExit, entry });
       setHasRealEngine(true);
       setState("connected");
@@ -278,13 +295,15 @@ function App() {
         src: "engine",
         msg: `Туннель поднят: ${realExit.protocol.toUpperCase()} → ${realExit.address}`,
       });
-      const killEnabled =
-        useSettingsStore.getState().values["mint.killSwitch"] === true;
-      if (killEnabled) {
-        try {
-          await invoke("killswitch_enable");
-        } catch (err) {
-          console.warn("killswitch_enable failed", err);
+      if (!isMobilePlatform()) {
+        const killEnabled =
+          useSettingsStore.getState().values["mint.killSwitch"] === true;
+        if (killEnabled) {
+          try {
+            await invoke("killswitch_enable");
+          } catch (err) {
+            console.warn("killswitch_enable failed", err);
+          }
         }
       }
       notify("Mint VPN", `Подключено: ${realExit.name}`);
@@ -317,7 +336,7 @@ function App() {
       await stopEngine();
     } catch {
     }
-    if (clearKill) {
+    if (clearKill && !isMobilePlatform()) {
       try {
         await invoke("killswitch_disable");
       } catch {
@@ -432,6 +451,36 @@ function App() {
     return () => {
       unlistenExit?.();
       unlistenLog?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobilePlatform()) return;
+    let unlisten: (() => void) | undefined;
+    const log = useLogs.getState().push;
+    (async () => {
+      try {
+        const { onVpnEvent } = await import("./utils/vpn");
+        unlisten = await onVpnEvent((event, payload) => {
+          const t = new Date().toISOString().slice(11, 23);
+          if (event === "error") {
+            const msg =
+              (payload as { message?: string })?.message ?? "ошибка туннеля";
+            setHasRealEngine(false);
+            setState("disconnected");
+            setConnectError(msg);
+            log({ t, lvl: "ERROR", src: "engine", msg: `vpn_error: ${msg}` });
+            notify("Mint VPN", `Ошибка: ${msg}`);
+          } else if (event === "stopped") {
+            setHasRealEngine(false);
+            setState("disconnected");
+            log({ t, lvl: "INFO", src: "engine", msg: "Туннель остановлен" });
+          }
+        });
+      } catch {}
+    })();
+    return () => {
+      unlisten?.();
     };
   }, []);
 
@@ -606,6 +655,7 @@ function App() {
   const updateRef = useRef<unknown>(null);
 
   useEffect(() => {
+    if (isMobilePlatform()) return;
     let cancelled = false;
     (async () => {
       try {
@@ -624,6 +674,8 @@ function App() {
   }, []);
 
   const installUpdate = async () => {
+    // Auto-updates are desktop-only — Play Store ships its own update channel.
+    if (isMobilePlatform()) return;
     const log = useLogs.getState().push;
     const ts = () => new Date().toISOString().slice(11, 23);
     setUpdateError(null);
@@ -663,16 +715,44 @@ function App() {
       setUpdateBusy("downloading");
       let downloaded = 0;
       let total = 0;
+      let lastPercent = 0;
+      let lastFlush = 0;
+      let scheduled = false;
+      const flush = () => {
+        scheduled = false;
+        lastFlush = performance.now();
+        const t = total > 0 ? total : downloaded;
+        if (t <= 0) return;
+        const raw = Math.min(100, Math.round((downloaded / t) * 100));
+        if (raw > lastPercent) lastPercent = raw;
+        setUpdateProgress({ done: downloaded, total: t, percent: lastPercent });
+      };
+      const schedule = () => {
+        if (scheduled) return;
+        const elapsed = performance.now() - lastFlush;
+        if (elapsed >= 50) {
+          flush();
+        } else {
+          scheduled = true;
+          setTimeout(flush, 50 - elapsed);
+        }
+      };
       await inst.downloadAndInstall((event) => {
         if (event.event === "Started") {
-          total = event.data?.contentLength ?? 0;
-          setUpdateProgress({ done: 0, total });
+          const cl = event.data?.contentLength ?? 0;
+          if (cl > total) total = cl;
+          downloaded = 0;
+          lastPercent = 0;
+          setUpdateProgress({ done: 0, total, percent: 0 });
+          lastFlush = performance.now();
         } else if (event.event === "Progress") {
-          downloaded += event.data?.chunkLength ?? 0;
-          setUpdateProgress({ done: downloaded, total });
+          const c = event.data?.chunkLength ?? 0;
+          if (c > 0) downloaded += c;
+          schedule();
         } else if (event.event === "Finished") {
           setUpdateBusy("installing");
-          setUpdateProgress({ done: total || downloaded, total: total || downloaded });
+          const final = total || downloaded;
+          setUpdateProgress({ done: final, total: final, percent: 100 });
         }
       });
       try {
@@ -701,6 +781,7 @@ function App() {
   };
 
   const checkForUpdates = async (): Promise<{ version: string } | "uptodate" | "error"> => {
+    if (isMobilePlatform()) return "uptodate";
     const log = useLogs.getState().push;
     const ts = () => new Date().toISOString().slice(11, 23);
     setUpdateError(null);
@@ -729,25 +810,42 @@ function App() {
     ? savedServers.find((s) => s.id === pendingSwitchId) ?? null
     : null;
 
+  const isMobile = useIsMobile();
+
   return (
-    <div className="h-full w-full flex flex-col bg-ink-950 text-white relative overflow-hidden grain">
+    <div
+      className="h-full w-full flex flex-col bg-ink-950 text-white relative overflow-hidden grain"
+      style={
+        isMobile
+          ? { paddingTop: "env(safe-area-inset-top)" }
+          : undefined
+      }
+    >
       <AppBackground />
 
-      <TitleBar />
+      {!isMobile && <TitleBar />}
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <Sidebar
-          page={page}
-          setPage={setPage}
-          state={state}
-          update={update}
-          updateBusy={updateBusy}
-          updateProgress={updateProgress}
-          updateError={updateError}
-          onInstallUpdate={installUpdate}
-          onDismissUpdate={() => setUpdate(null)}
-          onDismissUpdateError={() => setUpdateError(null)}
-        />
+      <div
+        className={
+          isMobile
+            ? "flex flex-1 overflow-hidden relative flex-col"
+            : "flex flex-1 overflow-hidden relative"
+        }
+      >
+        {!isMobile && (
+          <Sidebar
+            page={page}
+            setPage={setPage}
+            state={state}
+            update={update}
+            updateBusy={updateBusy}
+            updateProgress={updateProgress}
+            updateError={updateError}
+            onInstallUpdate={installUpdate}
+            onDismissUpdate={() => setUpdate(null)}
+            onDismissUpdateError={() => setUpdateError(null)}
+          />
+        )}
 
         <main className="flex-1 relative overflow-hidden">
           <AnimatePresence mode="wait">
@@ -793,6 +891,8 @@ function App() {
             </motion.div>
           </AnimatePresence>
         </main>
+
+        {isMobile && <MobileNav page={page} setPage={setPage} />}
       </div>
 
       <ConfirmDialog

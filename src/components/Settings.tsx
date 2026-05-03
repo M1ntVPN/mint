@@ -23,6 +23,7 @@ import { BackgroundPreview } from "./AppBackground";
 import { MultiHopCard } from "./MultiHopCard";
 import { useSetting } from "../store/settings";
 import { useConnection } from "../store/connection";
+import { isMobile as isMobilePlatform } from "../utils/platform";
 
 type CategoryKey =
   | "appearance"
@@ -33,18 +34,19 @@ type CategoryKey =
   | "connection"
   | "updates";
 
-const CATEGORIES: {
+const ALL_CATEGORIES: {
   key: CategoryKey;
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
+  desktopOnly?: boolean;
 }[] = [
   { key: "appearance", label: "Внешний вид", icon: Palette },
-  { key: "behavior", label: "Поведение", icon: MonitorCog },
+  { key: "behavior", label: "Поведение", icon: MonitorCog, desktopOnly: true },
   { key: "confirmations", label: "Подтверждения", icon: HelpCircle },
-  { key: "security", label: "Безопасность", icon: ShieldCheck },
+  { key: "security", label: "Безопасность", icon: ShieldCheck, desktopOnly: true },
   { key: "network", label: "Сеть и DNS", icon: Globe },
   { key: "connection", label: "Соединение", icon: Wifi },
-  { key: "updates", label: "Обновления", icon: Sparkles },
+  { key: "updates", label: "Обновления", icon: Sparkles, desktopOnly: true },
 ];
 
 interface SettingsPageProps {
@@ -62,6 +64,10 @@ export function SettingsPage({
   updateBusy = "idle",
   updateError,
 }: SettingsPageProps = {}) {
+  const mobile = isMobilePlatform();
+  const categories = mobile
+    ? ALL_CATEGORIES.filter((c) => !c.desktopOnly)
+    : ALL_CATEGORIES;
   const [active, setActive] = useState<CategoryKey>("appearance");
 
   return (
@@ -69,7 +75,7 @@ export function SettingsPage({
       <div className="w-60 shrink-0 flex flex-col">
         <PageHeader title="Настройки" />
         <div className="mt-5 space-y-1 overflow-y-auto scroll-thin pr-1">
-          {CATEGORIES.map((c) => {
+          {categories.map((c) => {
             const Icon = c.icon;
             const isActive = c.key === active;
             return (

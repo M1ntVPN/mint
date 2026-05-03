@@ -18,6 +18,8 @@ import {
   FolderMinus,
   MoreHorizontal,
   Check,
+  Search,
+  X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -32,6 +34,8 @@ import {
   prefetchIcons,
   subscribeIcons,
 } from "../utils/exeIcons";
+import { isMobile as isMobilePlatform } from "../utils/platform";
+import { listInstalledApps, type InstalledApp as AndroidApp } from "../utils/vpn";
 
 type Mode = "full" | "whitelist" | "blacklist";
 
@@ -50,7 +54,234 @@ const MODES: { key: Mode; label: string; short: string; icon: React.ComponentTyp
   { key: "blacklist", label: "Кроме указанных", short: "Всё через VPN, кроме списков", icon: ShieldOff },
 ];
 
+function TunnelingMobile() {
+  const mode = useTunneling((s) => s.mode);
+  const setMode = useTunneling((s) => s.setMode);
+  const apps = useTunneling((s) => s.apps);
+  const flipApp = useTunneling((s) => s.flipApp);
+  const removeApp = useTunneling((s) => s.removeApp);
+  const addAppStore = useTunneling((s) => s.addApp);
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [installedApps, setInstalledApps] = useState<AndroidApp[]>([]);
+  const [loadingApps, setLoadingApps] = useState(false);
+
+  const openPicker = async () => {
+    setPickerOpen(true);
+    setSearch("");
+    if (installedApps.length === 0) {
+      setLoadingApps(true);
+      try {
+        const list = await listInstalledApps();
+        list.sort((a, b) => a.label.localeCompare(b.label));
+        setInstalledApps(list);
+      } catch (err) {
+        console.warn("listInstalledApps failed", err);
+      }
+      setLoadingApps(false);
+    }
+  };
+
+  const addedPkgs = useMemo(
+    () => new Set(apps.map((a) => a.packageName).filter(Boolean)),
+    [apps],
+  );
+
+  const filteredApps = useMemo(() => {
+    const q = search.toLowerCase();
+    return installedApps.filter(
+      (a) =>
+        !addedPkgs.has(a.packageName) &&
+        (a.label.toLowerCase().includes(q) ||
+          a.packageName.toLowerCase().includes(q)),
+    );
+  }, [installedApps, search, addedPkgs]);
+
+  const addApp = (app: AndroidApp) => {
+    addAppStore(
+      { name: app.label, exe: app.packageName, packageName: app.packageName },
+      mode === "whitelist" ? "vpn" : "bypass",
+    );
+  };
+
+  const splitDisabled = mode === "full";
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PageHeader title="Туннелирование" />
+
+      <div className="px-4 py-3 flex gap-1 bg-white/[0.03] border-b border-white/5">
+        {(["full", "whitelist", "blacklist"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={cn(
+              "flex-1 py-2 rounded-lg text-xs font-medium transition-colors",
+              mode === m
+                ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30"
+                : "text-white/50 hover:text-white/70 hover:bg-white/5",
+            )}
+          >
+            {m === "full" ? "Весь трафик" : m === "whitelist" ? "Только выбранные" : "Всё кроме выбранных"}
+          </button>
+        ))}
+      </div>
+
+      {!splitDisabled && (
+        <div className="px-4 py-2 text-xs text-white/40">
+          {mode === "whitelist"
+            ? "Только добавленные приложения пойдут через VPN"
+            : "Весь трафик через VPN, кроме добавленных приложений"}
+        </div>
+      )}
+
+      {splitDisabled && (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <Globe size={40} className="text-emerald-400/30 mb-3" />
+          <p className="text-sm text-white/40">
+            Весь трафик идёт через VPN. Переключи на «Только выбранные» или «Всё кроме выбранных», чтобы управлять приложениями.
+          </p>
+        </div>
+      )}
+
+      {!splitDisabled && (
+        <>
+          <div className="flex-1 overflow-y-auto">
+            {apps.length === 0 && (
+              <div className="flex flex-col items-center justify-center p-8 text-center h-full">
+                <Split size={36} className="text-white/15 mb-3" />
+                <p className="text-sm text-white/40 mb-4">Нет приложений</p>
+              </div>
+            )}
+            {apps.map((app) => (
+              <div
+                key={app.id}
+                className="flex items-center gap-3 px-4 py-3 border-b border-white/5"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-white/90 truncate">{app.name}</div>
+                  <div className="text-[11px] text-white/35 truncate">{app.packageName || app.exe}</div>
+                </div>
+                <button
+                  onClick={() => flipApp(app.id)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-[11px] font-medium transition-colors shrink-0",
+                    app.via === "vpn"
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "bg-amber-500/15 text-amber-400",
+                  )}
+                >
+                  {app.via === "vpn" ? "VPN" : "Напрямую"}
+                </button>
+                <button
+                  onClick={() => removeApp(app.id)}
+                  className="p-1 text-white/25 hover:text-red-400 transition-colors shrink-0"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="p-4 border-t border-white/5">
+            <button
+              onClick={openPicker}
+              className="w-full py-3 rounded-xl bg-emerald-500/15 text-emerald-400 text-sm font-medium hover:bg-emerald-500/25 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus size={16} />
+              Добавить приложение
+            </button>
+          </div>
+        </>
+      )}
+
+      {pickerOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[200] bg-black/70 flex flex-col"
+            onClick={() => setPickerOpen(false)}
+          >
+            <div
+              className="mt-auto bg-[#181a20] rounded-t-2xl max-h-[75vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+                <h3 className="text-base font-medium text-white/90">
+                  Выберите приложение
+                </h3>
+                <button
+                  onClick={() => setPickerOpen(false)}
+                  className="p-1 text-white/40 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="px-4 pb-2">
+                <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
+                  <Search size={14} className="text-white/30" />
+                  <input
+                    autoFocus
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Поиск приложений…"
+                    className="flex-1 bg-transparent text-sm text-white/90 outline-none placeholder:text-white/25"
+                  />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto pb-safe">
+                {loadingApps && (
+                  <div className="flex items-center justify-center p-8 text-white/40 text-sm">
+                    Загрузка…
+                  </div>
+                )}
+                {!loadingApps && filteredApps.length === 0 && (
+                  <div className="flex items-center justify-center p-8 text-white/40 text-sm">
+                    {search ? "Ничего не найдено" : "Нет доступных приложений"}
+                  </div>
+                )}
+                {filteredApps.map((app) => (
+                  <button
+                    key={app.packageName}
+                    onClick={() => {
+                      addApp(app);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
+                  >
+                    {app.icon ? (
+                      <img
+                        src={app.icon}
+                        alt=""
+                        className="w-8 h-8 rounded-lg shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-white/10 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-white/90 truncate">
+                        {app.label}
+                      </div>
+                      <div className="text-[11px] text-white/35 truncate">
+                        {app.packageName}
+                      </div>
+                    </div>
+                    <Plus size={16} className="text-white/20 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
 export function TunnelingPage() {
+  return isMobilePlatform() ? <TunnelingMobile /> : <TunnelingDesktop />;
+}
+
+function TunnelingDesktop() {
   const mode = useTunneling((s) => s.mode);
   const setMode = useTunneling((s) => s.setMode);
   const apps = useTunneling((s) => s.apps);
