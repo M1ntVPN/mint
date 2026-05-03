@@ -102,11 +102,17 @@ jobs:
 
       - name: Decode release keystore
         id: keystore
-        if: ${{ secrets.MINT_ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          KS_BASE64: ${{ secrets.MINT_ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.MINT_ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/mint-release.keystore
-          echo "path=/tmp/mint-release.keystore" >> "$GITHUB_OUTPUT"
-          echo "available=true" >> "$GITHUB_OUTPUT"
+          if [ -n "$KS_BASE64" ]; then
+            echo "$KS_BASE64" | base64 -d > /tmp/mint-release.keystore
+            echo "path=/tmp/mint-release.keystore" >> "$GITHUB_OUTPUT"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No keystore secret configured — skipping release signing."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build APK (debug)
         run: npx --no-install @tauri-apps/cli android build --debug --apk
