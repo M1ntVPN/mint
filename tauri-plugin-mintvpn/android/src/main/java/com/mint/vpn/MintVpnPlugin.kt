@@ -2,7 +2,14 @@ package com.mint.vpn
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.net.VpnService
+import android.os.Build
+import android.util.Base64
 import androidx.activity.result.ActivityResult
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -11,11 +18,15 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import org.json.JSONArray
+import java.io.ByteArrayOutputStream
 
 @InvokeArg
 class StartVpnArgs {
     var config: String = ""
     var profileName: String? = null
+    var allowedApps: Array<String>? = null
+    var disallowedApps: Array<String>? = null
 }
 
 /**
@@ -73,6 +84,8 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
                 action = MintVpnService.ACTION_START
                 putExtra(MintVpnService.EXTRA_CONFIG, args.config)
                 putExtra(MintVpnService.EXTRA_PROFILE_NAME, args.profileName ?: "Mint VPN")
+                args.allowedApps?.let { putExtra(MintVpnService.EXTRA_ALLOWED_APPS, it) }
+                args.disallowedApps?.let { putExtra(MintVpnService.EXTRA_DISALLOWED_APPS, it) }
             }
             androidx.core.content.ContextCompat.startForegroundService(activity, intent)
             val ret = JSObject()
@@ -100,5 +113,61 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
         ret.put("running", MintVpnService.isRunning())
         MintVpnService.lastError?.let { ret.put("errorMsg", it) }
         invoke.resolve(ret)
+    }
+
+    @Command
+    fun list_installed_apps(invoke: Invoke) {
+        Thread {
+            try {
+                val pm = activity.packageManager
+                val apps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getInstalledApplications(
+                        PackageManager.ApplicationInfoFlags.of(0)
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getInstalledApplications(0)
+                }
+                val ownPkg = activity.packageName
+                val arr = JSONArray()
+                for (info in apps) {
+                    if (info.packageName == ownPkg) continue
+                    if (info.flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
+                        pm.getLaunchIntentForPackage(info.packageName) == null) continue
+                    val obj = JSObject()
+                    obj.put("packageName", info.packageName)
+                    obj.put("label", pm.getApplicationLabel(info).toString())
+                    try {
+                        val icon = pm.getApplicationIcon(info)
+                        val bmp = if (icon is BitmapDrawable) {
+                            icon.bitmap
+                        } else {
+                            val b = Bitmap.createBitmap(
+                                icon.intrinsicWidth.coerceAtLeast(1),
+                                icon.intrinsicHeight.coerceAtLeast(1),
+                                Bitmap.Config.ARGB_8888
+                            )
+                            val c = Canvas(b)
+                            icon.setBounds(0, 0, c.width, c.height)
+                            icon.draw(c)
+                            b
+                        }
+                        val scaled = Bitmap.createScaledBitmap(bmp, 48, 48, true)
+                        val baos = ByteArrayOutputStream()
+                        scaled.compress(Bitmap.CompressFormat.PNG, 80, baos)
+                        obj.put("icon", "data:image/png;base64," +
+                            Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP))
+                    } catch (_: Throwable) {
+                        obj.put("icon", "")
+                    }
+                    arr.put(obj)
+                }
+                val ret = JSObject()
+                ret.put("apps", arr)
+                invoke.resolve(ret)
+            } catch (t: Throwable) {
+                invoke.reject(t.message ?: "Failed to list apps")
+            }
+        }.start()
     }
 }
