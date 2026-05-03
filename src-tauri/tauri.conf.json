@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mint VPN",
   "mainBinaryName": "Mint",
-  "version": "0.2.4",
+  "version": "0.2.7",
   "identifier": "com.mint.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -64,7 +64,7 @@
       "endpoints": [
         "https://github.com/M1ntVPN/mint/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFNUI4MTk0NDNFN0ZBRjkKUldlNSt1ZERsSUZibnYwcE9nYk1TMjZ1bit1M1d0SDczUVJrazd6aXRDTUhFVDhzdU9yL1JOdGQK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYxMDlDQjY5RUM4RTE0RjAKUldUd0ZJN3NhY3NKWWJ4R055d2hNZUk1SWpITVFKTWZhTmgxV0kybDZlUHNGVFp5UHVBZldYc2EK",
       "windows": {
         "installMode": "passive"
       }

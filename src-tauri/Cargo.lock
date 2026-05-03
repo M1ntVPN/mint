@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "mint"
-version = "0.2.4"
+version = "0.2.7"
 dependencies = [
  "libc",
  "once_cell",
@@ -2418,6 +2418,7 @@ dependencies = [
  "tauri-plugin-deep-link",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-mintvpn",
  "tauri-plugin-notification",
  "tauri-plugin-os",
  "tauri-plugin-process",
@@ -4805,6 +4806,18 @@ dependencies = [
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-mintvpn"
+version = "0.2.7"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
