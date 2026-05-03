@@ -26,6 +26,7 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { MobileNav } from "./components/MobileNav";
 import { useIsMobile } from "./utils/useIsMobile";
 import { isMobile as isMobilePlatform } from "./utils/platform";
+import { checkAndroidUpdate, type AndroidReleaseInfo } from "./utils/androidUpdater";
 
 function serializeTunnelingConfig(s: {
   mode: TunnelMode;
@@ -715,12 +716,22 @@ function App() {
   }, []);
 
   const updateRef = useRef<unknown>(null);
+  const androidUpdateRef = useRef<AndroidReleaseInfo | null>(null);
 
   useEffect(() => {
-    if (isMobilePlatform()) return;
     let cancelled = false;
     (async () => {
       try {
+        if (isMobilePlatform()) {
+          // Android: poll GitHub releases for the latest v*-android tag
+          // and surface a banner that links to the APK download.
+          const info = (await invoke("app_version")) as { version: string };
+          const release = await checkAndroidUpdate(info.version);
+          if (cancelled || !release) return;
+          androidUpdateRef.current = release;
+          setUpdate({ version: release.version, notes: release.notes });
+          return;
+        }
         const { check } = await import("@tauri-apps/plugin-updater");
         const result = await check();
         if (cancelled || !result) return;
@@ -736,12 +747,35 @@ function App() {
   }, []);
 
   const installUpdate = async () => {
-    // Auto-updates are desktop-only — Play Store ships its own update channel.
-    if (isMobilePlatform()) return;
     const log = useLogs.getState().push;
     const ts = () => new Date().toISOString().slice(11, 23);
     setUpdateError(null);
     setUpdateProgress(null);
+    if (isMobilePlatform()) {
+      // Android: hand off to the system browser to download the APK from
+      // GitHub Releases. The user installs it themselves (Android security
+      // model — no silent install for sideloaded apps).
+      const release = androidUpdateRef.current;
+      if (!release) {
+        setUpdateError("Не удалось получить ссылку на APK.");
+        return;
+      }
+      try {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open(release.apkUrl);
+      } catch (e) {
+        const detail =
+          typeof e === "string" ? e : (e as Error)?.message ?? "неизвестная ошибка";
+        setUpdateError(`Не удалось открыть ссылку: ${detail}`);
+        log({
+          t: ts(),
+          lvl: "ERR",
+          src: "updater",
+          msg: `android open(apk) failed: ${detail}`,
+        });
+      }
+      return;
+    }
     type UpdateHandle = {
       downloadAndInstall: (
         cb?: (event: {
@@ -843,10 +877,31 @@ function App() {
   };
 
   const checkForUpdates = async (): Promise<{ version: string } | "uptodate" | "error"> => {
-    if (isMobilePlatform()) return "uptodate";
     const log = useLogs.getState().push;
     const ts = () => new Date().toISOString().slice(11, 23);
     setUpdateError(null);
+    if (isMobilePlatform()) {
+      try {
+        const info = (await invoke("app_version")) as { version: string };
+        // Manual check bypasses the cache so the user gets fresh data.
+        const release = await checkAndroidUpdate(info.version, { force: true });
+        if (!release) return "uptodate";
+        androidUpdateRef.current = release;
+        setUpdate({ version: release.version, notes: release.notes });
+        return { version: release.version };
+      } catch (e) {
+        const detail =
+          typeof e === "string" ? e : (e as Error)?.message ?? "неизвестная ошибка";
+        setUpdateError(`Проверка обновлений не удалась: ${detail}`);
+        log({
+          t: ts(),
+          lvl: "ERR",
+          src: "updater",
+          msg: `android checkForUpdates failed: ${detail}`,
+        });
+        return "error";
+      }
+    }
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
       const result = await check();
