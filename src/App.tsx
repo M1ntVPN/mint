@@ -172,7 +172,9 @@ function App() {
   useEffect(() => {
     if (didProxyCleanRef.current) return;
     didProxyCleanRef.current = true;
-    invoke("sysproxy_clear").catch(() => undefined);
+    if (!isMobilePlatform()) {
+      invoke("sysproxy_clear").catch(() => undefined);
+    }
   }, []);
 
   const didPlaceholderPurgeRef = useRef(false);
@@ -293,13 +295,15 @@ function App() {
         src: "engine",
         msg: `Туннель поднят: ${realExit.protocol.toUpperCase()} → ${realExit.address}`,
       });
-      const killEnabled =
-        useSettingsStore.getState().values["mint.killSwitch"] === true;
-      if (killEnabled) {
-        try {
-          await invoke("killswitch_enable");
-        } catch (err) {
-          console.warn("killswitch_enable failed", err);
+      if (!isMobilePlatform()) {
+        const killEnabled =
+          useSettingsStore.getState().values["mint.killSwitch"] === true;
+        if (killEnabled) {
+          try {
+            await invoke("killswitch_enable");
+          } catch (err) {
+            console.warn("killswitch_enable failed", err);
+          }
         }
       }
       notify("Mint VPN", `Подключено: ${realExit.name}`);
@@ -332,7 +336,7 @@ function App() {
       await stopEngine();
     } catch {
     }
-    if (clearKill) {
+    if (clearKill && !isMobilePlatform()) {
       try {
         await invoke("killswitch_disable");
       } catch {

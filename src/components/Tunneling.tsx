@@ -32,6 +32,7 @@ import {
   prefetchIcons,
   subscribeIcons,
 } from "../utils/exeIcons";
+import { isMobile as isMobilePlatform } from "../utils/platform";
 
 type Mode = "full" | "whitelist" | "blacklist";
 
@@ -50,7 +51,25 @@ const MODES: { key: Mode; label: string; short: string; icon: React.ComponentTyp
   { key: "blacklist", label: "Кроме указанных", short: "Всё через VPN, кроме списков", icon: ShieldOff },
 ];
 
+function TunnelingMobilePlaceholder() {
+  return (
+    <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+      <Split size={48} className="text-white/20 mb-4" />
+      <h2 className="text-lg font-medium text-white/70 mb-2">
+        Раздельное туннелирование
+      </h2>
+      <p className="text-sm text-white/40 max-w-xs">
+        Управление маршрутизацией приложений на Android появится в будущем обновлении.
+      </p>
+    </div>
+  );
+}
+
 export function TunnelingPage() {
+  return isMobilePlatform() ? <TunnelingMobilePlaceholder /> : <TunnelingDesktop />;
+}
+
+function TunnelingDesktop() {
   const mode = useTunneling((s) => s.mode);
   const setMode = useTunneling((s) => s.setMode);
   const apps = useTunneling((s) => s.apps);
