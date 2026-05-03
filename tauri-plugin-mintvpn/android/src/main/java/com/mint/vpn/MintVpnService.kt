@@ -1,6 +1,7 @@
 package com.mint.vpn
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
@@ -44,6 +45,8 @@ class MintVpnService :
         const val ACTION_STOP = "com.mint.vpn.action.STOP"
         const val EXTRA_CONFIG = "config"
         const val EXTRA_PROFILE_NAME = "profileName"
+        const val EXTRA_ALLOWED_APPS = "allowedApps"
+        const val EXTRA_DISALLOWED_APPS = "disallowedApps"
 
         @Volatile private var instance: MintVpnService? = null
         @Volatile var lastError: String? = null
@@ -61,6 +64,8 @@ class MintVpnService :
     private var profileName: String = "Mint VPN"
     private var pendingConfig: String? = null
     private var tunFd: ParcelFileDescriptor? = null
+    private var allowedApps: Array<String>? = null
+    private var disallowedApps: Array<String>? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -72,6 +77,8 @@ class MintVpnService :
             ACTION_START -> {
                 profileName = intent.getStringExtra(EXTRA_PROFILE_NAME) ?: "Mint VPN"
                 pendingConfig = intent.getStringExtra(EXTRA_CONFIG)
+                allowedApps = intent.getStringArrayExtra(EXTRA_ALLOWED_APPS)
+                disallowedApps = intent.getStringArrayExtra(EXTRA_DISALLOWED_APPS)
                 startTunnel()
             }
             ACTION_STOP -> {
@@ -302,6 +309,18 @@ class MintVpnService :
             while (r6.hasNext()) {
                 val rp = r6.next()
                 builder.addRoute(rp.address(), rp.prefix())
+            }
+        }
+
+        // Per-app routing
+        allowedApps?.forEach { pkg ->
+            try { builder.addAllowedApplication(pkg) } catch (e: PackageManager.NameNotFoundException) {
+                Log.w(TAG, "addAllowedApplication: $pkg not found")
+            }
+        }
+        disallowedApps?.forEach { pkg ->
+            try { builder.addDisallowedApplication(pkg) } catch (e: PackageManager.NameNotFoundException) {
+                Log.w(TAG, "addDisallowedApplication: $pkg not found")
             }
         }
 

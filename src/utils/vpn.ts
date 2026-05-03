@@ -21,6 +21,12 @@ export interface VpnStatus {
   errorMsg?: string;
 }
 
+export interface InstalledApp {
+  packageName: string;
+  label: string;
+  icon: string;
+}
+
 export async function vpnPrepare(): Promise<{ granted: boolean }> {
   if (!isAndroid()) return { granted: true };
   return await invoke<{ granted: boolean }>("plugin:mintvpn|prepare_vpn", {});
@@ -29,15 +35,27 @@ export async function vpnPrepare(): Promise<{ granted: boolean }> {
 export async function vpnStart(
   config: string,
   profileName?: string,
+  opts?: { allowedApps?: string[]; disallowedApps?: string[] },
 ): Promise<VpnStatus> {
   if (isAndroid()) {
     return await invoke<VpnStatus>("plugin:mintvpn|start_vpn", {
       config,
       profileName,
+      allowedApps: opts?.allowedApps,
+      disallowedApps: opts?.disallowedApps,
     });
   }
   await invoke("singbox_start", { config });
   return { running: true };
+}
+
+export async function listInstalledApps(): Promise<InstalledApp[]> {
+  if (!isAndroid()) return [];
+  const res = await invoke<{ apps: InstalledApp[] }>(
+    "plugin:mintvpn|list_installed_apps",
+    {},
+  );
+  return res.apps;
 }
 
 export async function vpnStop(): Promise<VpnStatus> {

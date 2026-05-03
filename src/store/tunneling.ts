@@ -12,6 +12,7 @@ export interface AppRule {
   via: "vpn" | "bypass";
   folderId?: string | null;
   path?: string | null;
+  packageName?: string;
 }
 
 export interface NetRule {

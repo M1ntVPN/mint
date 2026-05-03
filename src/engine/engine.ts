@@ -67,7 +67,18 @@ export async function startEngine(opts: StartOptions): Promise<void> {
     ...dns,
   });
   const profileName = opts.exit.name || "Mint VPN";
-  const status = await vpnStart(config, profileName);
+
+  let vpnOpts: { allowedApps?: string[]; disallowedApps?: string[] } | undefined;
+  if (isAndroid() && t.mode !== "full" && t.apps.length > 0) {
+    const withPkg = t.apps.filter((a) => a.packageName);
+    if (t.mode === "whitelist") {
+      vpnOpts = { allowedApps: withPkg.filter((a) => a.via === "vpn").map((a) => a.packageName!) };
+    } else {
+      vpnOpts = { disallowedApps: withPkg.filter((a) => a.via === "bypass").map((a) => a.packageName!) };
+    }
+  }
+
+  const status = await vpnStart(config, profileName, vpnOpts);
   if (status.errorMsg) {
     throw new Error(status.errorMsg);
   }

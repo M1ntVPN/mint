@@ -54,4 +54,10 @@ impl<R: Runtime> MintVpn<R> {
             .run_mobile_plugin("vpn_status", payload)
             .map_err(Into::into)
     }
+
+    pub fn list_installed_apps(&self, payload: VoidRequest) -> crate::Result<InstalledAppsResponse> {
+        self.0
+            .run_mobile_plugin("list_installed_apps", payload)
+            .map_err(Into::into)
+    }
 }
