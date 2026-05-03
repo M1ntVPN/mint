@@ -455,6 +455,36 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isMobilePlatform()) return;
+    let unlisten: (() => void) | undefined;
+    const log = useLogs.getState().push;
+    (async () => {
+      try {
+        const { onVpnEvent } = await import("./utils/vpn");
+        unlisten = await onVpnEvent((event, payload) => {
+          const t = new Date().toISOString().slice(11, 23);
+          if (event === "error") {
+            const msg =
+              (payload as { message?: string })?.message ?? "ошибка туннеля";
+            setHasRealEngine(false);
+            setState("disconnected");
+            setConnectError(msg);
+            log({ t, lvl: "ERROR", src: "engine", msg: `vpn_error: ${msg}` });
+            notify("Mint VPN", `Ошибка: ${msg}`);
+          } else if (event === "stopped") {
+            setHasRealEngine(false);
+            setState("disconnected");
+            log({ t, lvl: "INFO", src: "engine", msg: "Туннель остановлен" });
+          }
+        });
+      } catch {}
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
