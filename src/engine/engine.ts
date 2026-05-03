@@ -83,41 +83,56 @@ export async function startEngine(opts: StartOptions): Promise<void> {
     throw new Error(status.errorMsg);
   }
   if (!isAndroid()) {
-    try {
-      await invoke("sysproxy_set", { server: `127.0.0.1:${MIXED_INBOUND_PORT}` });
-    } catch (e) {
-      console.warn("sysproxy_set failed", e);
-    }
-    // Race guard — if sing-box died between vpnStart() returning and us
-    // setting the system proxy (e.g. config error caught only at runtime),
-    // the singbox-exit listener already ran sysproxy_clear *before* our
-    // set, leaving the registry pointing at 127.0.0.1:7890 with no engine
-    // behind it. Verify the child is still alive and reverse the set if
-    // not, so the user's internet doesn't get silently routed into a
-    // dead localhost listener.
-    try {
-      const stillRunning = await invoke<boolean>("singbox_running");
-      if (!stillRunning) {
-        try {
-          await invoke("sysproxy_clear");
-        } catch {
-        }
-        throw new Error(
-          "sing-box завершился сразу после старта (см. логи)"
-        );
+    // Mint is a TUN-based VPN — sing-box's tun inbound already captures
+    // every packet via wintun, so we don't need to also flip the Windows
+    // system proxy by default. Doing so used to be the cause of "браузер
+    // и Telegram перестали работать после краша VPN" because if Mint
+    // crashed, the registry stayed pointing at 127.0.0.1:7890 with no
+    // listener. Now we only set the system proxy when the user explicitly
+    // opts in via mint.useSystemProxy (some legacy Win32 apps that ignore
+    // the routing table need it).
+    const useSysproxy =
+      useSettingsStore.getState().values["mint.useSystemProxy"] === true;
+    if (useSysproxy) {
+      try {
+        await invoke("sysproxy_set", { server: `127.0.0.1:${MIXED_INBOUND_PORT}` });
+      } catch (e) {
+        console.warn("sysproxy_set failed", e);
       }
-    } catch (e) {
-      if (e instanceof Error && e.message.startsWith("sing-box")) throw e;
+      // Race guard — if sing-box died between vpnStart() returning and
+      // us setting the system proxy (e.g. config error caught only at
+      // runtime), the singbox-exit listener already ran sysproxy_clear
+      // *before* our set, leaving the registry pointing at
+      // 127.0.0.1:7890 with no engine behind it. Verify the child is
+      // still alive and reverse the set if not, so the user's internet
+      // doesn't get silently routed into a dead localhost listener.
+      try {
+        const stillRunning = await invoke<boolean>("singbox_running");
+        if (!stillRunning) {
+          try {
+            await invoke("sysproxy_clear");
+          } catch {
+          }
+          throw new Error(
+            "sing-box завершился сразу после старта (см. логи)"
+          );
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith("sing-box")) throw e;
+      }
     }
   }
 }
 
 export async function stopEngine(): Promise<void> {
   if (!isAndroid()) {
+    // Always try to clear, even if useSystemProxy is currently off — the
+    // user might have toggled it off mid-session, or this might be a
+    // start-up cleanup after an abnormal shutdown.
     try {
-      await invoke("sysproxy_clear");
+      await invoke("sysproxy_clear_if_local");
     } catch (e) {
-      console.warn("sysproxy_clear failed", e);
+      console.warn("sysproxy_clear_if_local failed", e);
     }
   }
   await vpnStop();
