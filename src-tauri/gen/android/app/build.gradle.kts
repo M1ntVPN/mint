@@ -19,7 +19,17 @@ android {
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.mint.app"
-        minSdk = 24
+        // Android 8.0 (Oreo, API 26).
+        // Tauri's PluginManager constructor does
+        //   ObjectMapper.<clinit> -> JacksonAnnotationIntrospector.<clinit>
+        // which references java.lang.BootstrapMethodError (added to ART
+        // in API 26) via an invokedynamic site that D8 cannot desugar
+        // even with isCoreLibraryDesugaringEnabled=true. Anything below
+        // API 26 (Android 7.x; e.g. default Nox Player 7) crashes at
+        // startup with NoClassDefFoundError. API 26 covers ~96% of all
+        // active Android devices and matches sing-box-for-android's
+        // 'play' flavor minSdk.
+        minSdk = 26
         targetSdk = 35
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
