@@ -108,9 +108,12 @@ function App() {
       const probe = async () => {
         const ms = await urlTest("proxy");
         if (ms != null && ms > 0) {
+          // Show tunnel RTT in the dashboard StatsCards card.
+          // Don't write it back to the server's row ping — that row
+          // shows the *direct* (pre-VPN) latency, and overwriting it
+          // with the via-tunnel RTT made the list lie about which
+          // server is actually closest to the user.
           setPing(ms);
-          const sid = selectedIdRef.current;
-          if (sid) useServers.getState().setPing(sid, ms);
         }
       };
       probe();
@@ -173,7 +176,11 @@ function App() {
     if (didProxyCleanRef.current) return;
     didProxyCleanRef.current = true;
     if (!isMobilePlatform()) {
-      invoke("sysproxy_clear").catch(() => undefined);
+      // Conditional cleanup — only undoes a *Mint-installed* stale local
+      // proxy on launch. The previous unconditional sysproxy_clear() also
+      // wiped any unrelated corporate / third-party proxy the user may
+      // have configured outside of Mint.
+      invoke("sysproxy_clear_if_local").catch(() => undefined);
     }
   }, []);
 
@@ -239,15 +246,21 @@ function App() {
 
   const toggleInFlightRef = useRef(false);
 
-  const doConnect = async () => {
+  const doConnect = async (overrideExitId?: string) => {
     const log = useLogs.getState().push;
     const ts = () => new Date().toISOString().slice(11, 23);
-    const exit = savedServers.find((s) => s.id === selectedId) ?? null;
+    // Read latest server list from the store rather than the closure so
+    // that connect-after-state-change (e.g. profile context-menu, switch
+    // confirmation dialog) doesn't fire with a stale `selectedId`.
+    const allServers = useServers.getState().servers;
+    const targetId =
+      overrideExitId ?? selectedIdRef.current ?? selectedId;
+    const exit = allServers.find((s) => s.id === targetId) ?? null;
     const entry = multihopOn
-      ? savedServers.find((s) => s.id === entryId) ?? null
+      ? allServers.find((s) => s.id === entryId) ?? null
       : null;
     const realExit = multihopOn
-      ? savedServers.find((s) => s.id === exitId) ?? exit
+      ? allServers.find((s) => s.id === exitId) ?? exit
       : exit;
 
     if (!realExit) return;
@@ -318,6 +331,21 @@ function App() {
         src: "engine",
         msg: `startEngine: ${detail}`,
       });
+      // Defensive cleanup — if the engine partly came up (e.g. sing-box
+      // started but TUN setup failed mid-way), Windows can be left with
+      // sysproxy=127.0.0.1:7890 even though no working VPN is behind it,
+      // which kills the user's internet until the next successful
+      // connect/disconnect cycle. Always tear those side-effects down.
+      if (!isMobilePlatform()) {
+        try {
+          await invoke("sysproxy_clear");
+        } catch {
+        }
+        try {
+          await invoke("singbox_kill_orphans");
+        } catch {
+        }
+      }
       setState("disconnected");
       notify("Mint VPN", `Ошибка подключения: ${detail}`);
     }
@@ -367,17 +395,47 @@ function App() {
     }
   };
 
-  const restartTunnel = async () => {
+  const restartTunnel = async (overrideExitId?: string) => {
     if (toggleInFlightRef.current) return;
     toggleInFlightRef.current = true;
     try {
       await doDisconnect({ silent: true, clearKillswitch: false });
       await new Promise((r) => window.setTimeout(r, 500));
-      await doConnect();
+      await doConnect(overrideExitId);
     } finally {
       window.setTimeout(() => {
         toggleInFlightRef.current = false;
       }, 400);
+    }
+  };
+
+  // Atomic select-and-connect for entry points outside the dashboard
+  // (Profiles context-menu, deep links, etc.). Using `toggle()` after
+  // `setSelectedId` would race with React's state batching and reconnect
+  // to the *previous* server.
+  const connectTo = async (id: string) => {
+    selectedIdRef.current = id;
+    setSelectedId(id);
+    if (toggleInFlightRef.current) return;
+    if (state === "connected") {
+      const confirmActive =
+        useSettingsStore.getState().values["mint.confirmServerSwitch"] !== false;
+      if (confirmActive) {
+        setPendingSwitchId(id);
+        return;
+      }
+      await restartTunnel(id);
+      return;
+    }
+    if (state === "disconnected") {
+      toggleInFlightRef.current = true;
+      try {
+        await doConnect(id);
+      } finally {
+        window.setTimeout(() => {
+          toggleInFlightRef.current = false;
+        }, 400);
+      }
     }
   };
 
@@ -396,10 +454,14 @@ function App() {
     if (!pendingSwitchId) return;
     const id = pendingSwitchId;
     setPendingSwitchId(null);
+    selectedIdRef.current = id;
     setSelectedId(id);
     if (state === "connected") {
+      // Pass the new id explicitly — `restartTunnel` would otherwise
+      // reach into a stale render closure and reconnect to the *old*
+      // selection, which is the "switching server doesn't switch" bug.
       window.setTimeout(() => {
-        restartTunnel().catch(() => undefined);
+        restartTunnel(id).catch(() => undefined);
       }, 0);
     }
   };
@@ -875,6 +937,11 @@ function App() {
                 <ProfilesPage
                   pendingDeepLink={pendingDeepLink}
                   consumeDeepLink={() => setPendingDeepLink(null)}
+                  onConnectTo={(id) => {
+                    connectTo(id).catch(() => undefined);
+                  }}
+                  state={state}
+                  selectedId={selectedId}
                 />
               )}
               {page === "tunneling" && <TunnelingPage />}

@@ -2,14 +2,23 @@
 
 #[cfg(not(windows))]
 mod stub {
+    use tauri::AppHandle;
+
     #[tauri::command]
-    pub fn sysproxy_set(_server: String) -> Result<(), String> {
+    pub fn sysproxy_set(_app: AppHandle, _server: String) -> Result<(), String> {
         Ok(())
     }
     #[tauri::command]
-    pub fn sysproxy_clear() -> Result<(), String> {
+    pub fn sysproxy_clear(_app: AppHandle) -> Result<(), String> {
         Ok(())
     }
+    #[tauri::command]
+    pub fn sysproxy_clear_if_local(_app: AppHandle) -> Result<(), String> {
+        Ok(())
+    }
+
+    pub fn restore_orphan_snapshot_at_startup(_app: &AppHandle) {}
+    pub fn sysproxy_clear_blocking() {}
 }
 
 #[cfg(not(windows))]
@@ -20,12 +29,21 @@ use serde::{Deserialize, Serialize};
 #[cfg(windows)]
 use std::sync::Mutex;
 #[cfg(windows)]
+use tauri::{AppHandle, Manager};
+#[cfg(windows)]
 use winreg::enums::*;
 #[cfg(windows)]
 use winreg::RegKey;
 
 #[cfg(windows)]
 const KEY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+#[cfg(windows)]
+const SNAPSHOT_FILE: &str = "sysproxy.snapshot.json";
+// Mint's local mixed inbound (configBuilder.ts:MIXED_INBOUND_PORT). Mirrored
+// here so the startup cleanup can identify our own stale registry entries
+// without dragging the JS engine into the boot path.
+#[cfg(windows)]
+const MINT_PROXY_PORT: u16 = 7890;
 
 #[cfg(windows)]
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
@@ -74,14 +92,65 @@ fn write_snapshot(s: &Snapshot) -> Result<(), String> {
 }
 
 #[cfg(windows)]
+fn snapshot_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .ok()
+        .map(|p| p.join(SNAPSHOT_FILE))
+}
+
+#[cfg(windows)]
+fn save_snapshot_to_disk(app: &AppHandle, s: &Snapshot) {
+    let Some(p) = snapshot_path(app) else { return };
+    if let Some(parent) = p.parent() {
+        if std::fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+    if let Ok(json) = serde_json::to_string(s) {
+        let _ = std::fs::write(&p, json);
+    }
+}
+
+#[cfg(windows)]
+fn delete_snapshot_from_disk(app: &AppHandle) {
+    if let Some(p) = snapshot_path(app) {
+        let _ = std::fs::remove_file(p);
+    }
+}
+
+#[cfg(windows)]
+fn load_snapshot_from_disk(app: &AppHandle) -> Option<Snapshot> {
+    let p = snapshot_path(app)?;
+    let content = std::fs::read_to_string(&p).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+#[cfg(windows)]
+fn looks_like_mint_local_proxy(server: &str) -> bool {
+    let s = server.trim().to_ascii_lowercase();
+    let port_suffix = format!(":{}", MINT_PROXY_PORT);
+    // ProxyServer can be "host:port" or scheme prefixed ("http=host:port;https=...").
+    // Treat any localhost host + Mint's port as ours.
+    s.split([';', ' ']).any(|chunk| {
+        let chunk = chunk.trim_start_matches(|c: char| c.is_ascii_alphabetic() || c == '=');
+        (chunk.starts_with("127.0.0.1") || chunk.starts_with("localhost"))
+            && chunk.ends_with(&port_suffix)
+    })
+}
+
+#[cfg(windows)]
 #[tauri::command]
-pub fn sysproxy_set(server: String) -> Result<(), String> {
+pub fn sysproxy_set(app: AppHandle, server: String) -> Result<(), String> {
     let prev = read_snapshot()?;
     {
         let mut g = PREVIOUS
             .lock()
             .map_err(|e| format!("lock: {e}"))?;
         if g.is_none() {
+            // Persist the *user's* pre-Mint proxy config to disk too, so a
+            // crash/kill while connected doesn't lose the original settings.
+            save_snapshot_to_disk(&app, &prev);
             *g = Some(prev.clone());
         }
     }
@@ -98,7 +167,12 @@ pub fn sysproxy_set(server: String) -> Result<(), String> {
 
 #[cfg(windows)]
 #[tauri::command]
-pub fn sysproxy_clear() -> Result<(), String> {
+pub fn sysproxy_clear(app: AppHandle) -> Result<(), String> {
+    sysproxy_clear_inner(&app)
+}
+
+#[cfg(windows)]
+fn sysproxy_clear_inner(app: &AppHandle) -> Result<(), String> {
     let prev = {
         let mut g = PREVIOUS
             .lock()
@@ -110,5 +184,66 @@ pub fn sysproxy_clear() -> Result<(), String> {
         server: None,
         bypass: None,
     });
-    write_snapshot(&restore)
+    write_snapshot(&restore)?;
+    delete_snapshot_from_disk(app);
+    Ok(())
+}
+
+// Defensive variant used at app startup. Only touches the registry if the
+// current ProxyServer matches Mint's own local mixed inbound — otherwise we'd
+// happily wipe a user's unrelated corporate / system proxy on every launch.
+#[cfg(windows)]
+#[tauri::command]
+pub fn sysproxy_clear_if_local(app: AppHandle) -> Result<(), String> {
+    let current = read_snapshot()?;
+    let stuck = current.enable == 1
+        && current
+            .server
+            .as_deref()
+            .map(looks_like_mint_local_proxy)
+            .unwrap_or(false);
+    if !stuck {
+        return Ok(());
+    }
+    sysproxy_clear_inner(&app)
+}
+
+// Called from `lib.rs` setup() before the webview loads. If a previous Mint
+// session left a snapshot on disk (i.e. crashed / was killed without a
+// graceful disconnect), restore the user's original proxy config now.
+#[cfg(windows)]
+pub fn restore_orphan_snapshot_at_startup(app: &AppHandle) {
+    let Some(snapshot) = load_snapshot_from_disk(app) else { return };
+    // Only act if the registry still points at Mint's stale proxy. If the
+    // user already restored their proxy manually (or another tool fixed it),
+    // leave their settings alone.
+    let current = read_snapshot().unwrap_or_default();
+    let stuck = current.enable == 1
+        && current
+            .server
+            .as_deref()
+            .map(looks_like_mint_local_proxy)
+            .unwrap_or(false);
+    if stuck {
+        let _ = write_snapshot(&snapshot);
+    }
+    delete_snapshot_from_disk(app);
+}
+
+// Synchronous variant used during graceful shutdown / `prepare_for_update`.
+// Mirrors `sysproxy_clear` but doesn't depend on the JS event loop.
+#[cfg(windows)]
+pub fn sysproxy_clear_blocking() {
+    let prev = {
+        match PREVIOUS.lock() {
+            Ok(mut g) => g.take(),
+            Err(_) => None,
+        }
+    };
+    let restore = prev.unwrap_or_else(|| Snapshot {
+        enable: 0,
+        server: None,
+        bypass: None,
+    });
+    let _ = write_snapshot(&restore);
 }

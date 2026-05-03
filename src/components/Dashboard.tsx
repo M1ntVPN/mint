@@ -49,7 +49,7 @@ export function Dashboard(props: Props) {
       />
 
       <div className="relative shrink-0">
-        <div className="px-8 pt-8 pb-4 flex flex-col items-center">
+        <div className="px-8 pt-8 pb-4 flex flex-col items-center max-[720px]:px-4 max-[720px]:pt-5 max-[720px]:pb-3">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -80,7 +80,7 @@ export function Dashboard(props: Props) {
           </AnimatePresence>
         </div>
 
-        <div className="px-6 space-y-3 pb-3">
+        <div className="px-6 space-y-3 pb-3 max-[720px]:px-3 max-[720px]:pb-2">
           <StatsCards
             state={props.state}
             uptime={props.uptime}
@@ -91,7 +91,7 @@ export function Dashboard(props: Props) {
         </div>
       </div>
 
-      <div className="relative flex-1 min-h-0 px-6 pb-6 flex">
+      <div className="relative flex-1 min-h-0 px-6 pb-6 flex max-[720px]:px-3 max-[720px]:pb-3">
         {listServers.length === 0 ? (
           <EmptyServersCard />
         ) : (

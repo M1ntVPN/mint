@@ -26,6 +26,7 @@ import { useFolders } from "../store/folders";
 import { useConnection } from "../store/connection";
 import { useSettingsStore } from "../store/settings";
 import { ChevronDown, RefreshCw, FolderOpen, Trash } from "lucide-react";
+import type { ConnState } from "../types";
 
 type SortKey = "added-desc" | "added-asc" | "ping-asc" | "name-asc" | "favorite";
 
@@ -40,6 +41,12 @@ const SORTS: { key: SortKey; label: string }[] = [
 interface ProfilesPageProps {
   pendingDeepLink?: string | null;
   consumeDeepLink?: () => void;
+  // Atomic select-and-connect handler from <App>. We don't expose `setSelectedId`
+  // / `toggle` separately because using them sequentially races with React's
+  // state batching and reconnects to the *previous* selection.
+  onConnectTo?: (id: string) => void;
+  state?: ConnState;
+  selectedId?: string | null;
 }
 
 function parseInstallConfigUrl(deepLink: string): string | null {
@@ -55,6 +62,9 @@ function parseInstallConfigUrl(deepLink: string): string | null {
 export function ProfilesPage({
   pendingDeepLink,
   consumeDeepLink,
+  onConnectTo,
+  state,
+  selectedId,
 }: ProfilesPageProps = {}) {
   const servers = useServers((s) => s.servers);
   const removeServer = useServers((s) => s.remove);
@@ -445,13 +455,34 @@ export function ProfilesPage({
             style={{ left: contextMenu.x, top: contextMenu.y }}
             className="fixed z-50 min-w-[180px] rounded-xl bg-ink-900/95 border border-white/[0.06] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)] backdrop-blur-xl py-1.5"
           >
-            <ContextItem
-              icon={Power}
-              label="Подключиться"
-              onClick={() => {
-                setContextMenu(null);
-              }}
-            />
+            {(() => {
+              const isCurrent =
+                vpnActive && selectedId === contextMenu.id;
+              const label = isCurrent
+                ? "Текущий сервер"
+                : vpnActive
+                  ? "Переподключиться сюда"
+                  : state === "connecting" || state === "disconnecting"
+                    ? "Подождите…"
+                    : "Подключиться";
+              const disabled =
+                isCurrent ||
+                state === "connecting" ||
+                state === "disconnecting";
+              return (
+                <ContextItem
+                  icon={Power}
+                  label={label}
+                  disabled={disabled}
+                  onClick={() => {
+                    const id = contextMenu.id;
+                    setContextMenu(null);
+                    if (disabled) return;
+                    onConnectTo?.(id);
+                  }}
+                />
+              );
+            })()}
             <ContextItem
               icon={RefreshCw}
               label={vpnActive ? "Пинг недоступен при VPN" : "Пинговать"}
