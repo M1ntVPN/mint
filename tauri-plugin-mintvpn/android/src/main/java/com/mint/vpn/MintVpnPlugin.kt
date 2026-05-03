@@ -74,7 +74,7 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
                 putExtra(MintVpnService.EXTRA_CONFIG, args.config)
                 putExtra(MintVpnService.EXTRA_PROFILE_NAME, args.profileName ?: "Mint VPN")
             }
-            activity.startForegroundService(intent)
+            androidx.core.content.ContextCompat.startForegroundService(activity, intent)
             val ret = JSObject()
             ret.put("running", true)
             invoke.resolve(ret)
