@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "mint"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "libc",
  "once_cell",
@@ -4810,7 +4810,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-mintvpn"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "log",
  "serde",

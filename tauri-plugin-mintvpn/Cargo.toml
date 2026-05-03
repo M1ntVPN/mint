@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-mintvpn"
-version = "0.2.7"
+version = "0.2.8"
 description = "Mint VPN — Android VpnService bridge (sing-box / libbox)"
 authors = ["M1ntVPN"]
 license = "MIT"
