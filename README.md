@@ -2,149 +2,170 @@
 
 <br>
 
-<img src=".github/assets/logo.png" width="140" alt="Mint VPN" />
+<picture>
+  <img src=".github/assets/logo.png" width="128" alt="Mint VPN" />
+</picture>
+
+<br>
+<br>
+
+<h1>Mint VPN</h1>
+
+<h4>Fast. Private. Beautiful.<br>A premium VPN client for Windows.</h4>
 
 <br>
 
-# Mint VPN
-
-### Premium VPN client for Windows
+<a href="https://getmint.club">
+  <img src="https://img.shields.io/badge/Website-getmint.club-8b5cf6?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" />
+</a>&nbsp;
+<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml">
+  <img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows11&logoColor=white" alt="Download" />
+</a>&nbsp;
+<a href="https://github.com/M1ntVPN/mint/releases">
+  <img src="https://img.shields.io/github/v/release/M1ntVPN/mint?style=for-the-badge&color=10b981&label=Release" alt="Release" />
+</a>
 
 <br>
-
-[![Version](https://img.shields.io/badge/version-0.2.4-8b5cf6?style=for-the-badge)](https://github.com/M1ntVPN/mint/releases)
-[![Download](https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/M1ntVPN/mint/actions/workflows/build.yml)
-[![License](https://img.shields.io/badge/license-MIT-10b981?style=for-the-badge)](LICENSE)
-
 <br>
 
-[![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
-[![React 19](https://img.shields.io/badge/React_19-61dafb?style=flat-square&logo=react&logoColor=black)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Tailwind](https://img.shields.io/badge/Tailwind_v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![sing-box](https://img.shields.io/badge/sing--box-1.10-FF6B35?style=flat-square)](https://github.com/SagerNet/sing-box)
+<a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri_2-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri 2" /></a>
+<a href="https://react.dev"><img src="https://img.shields.io/badge/React_19-61dafb?style=flat-square&logo=react&logoColor=black" alt="React 19" /></a>
+<a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+<a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust" /></a>
+<a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" /></a>
+<a href="https://github.com/SagerNet/sing-box"><img src="https://img.shields.io/badge/sing--box-FF6B35?style=flat-square" alt="sing-box" /></a>
+<img src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square" alt="MIT License" />
 
+<br>
 <br>
 
 <img src=".github/assets/dashboard.png" alt="Mint VPN Dashboard" width="820" />
 
-<br>
-<br>
-
 </div>
 
-## Features
+<br>
+
+---
+
+<br>
+
+## Why Mint?
 
 <table>
-  <tr>
-    <td width="60" align="center">&#x1F6E1;&#xFE0F;</td>
-    <td><b>Multi-protocol VPN engine</b><br>Powered by <a href="https://github.com/SagerNet/sing-box">sing-box</a>. Supports <b>VLESS</b>, <b>VMess</b>, <b>Trojan</b>, <b>Shadowsocks</b>, and <b>Reality</b></td>
-  </tr>
-  <tr>
-    <td align="center">&#x1F9E9;</td>
-    <td><b>Split tunneling</b><br>Route traffic per-app, per-folder, or per-CIDR. Pick from installed apps or live processes</td>
-  </tr>
-  <tr>
-    <td align="center">&#x1F512;</td>
-    <td><b>Kill switch</b><br>Windows Firewall blocks all egress unless routed through the VPN tunnel</td>
-  </tr>
-  <tr>
-    <td align="center">&#x1F310;</td>
-    <td><b>Multi-hop routing</b><br>Chain multiple servers for an extra layer of privacy</td>
-  </tr>
-  <tr>
-    <td align="center">&#x1F4E5;</td>
-    <td><b>Subscription import</b><br>Paste a share-URI list, base64 blob, Clash YAML, or sing-box JSON config</td>
-  </tr>
-  <tr>
-    <td align="center">&#x1F3A8;</td>
-    <td><b>Polished UI</b><br>Frameless dark window, iOS-style animations, live RTT ping, traffic stats, accent themes</td>
-  </tr>
-  <tr>
-    <td align="center">&#x1F504;</td>
-    <td><b>Auto-updates</b><br>Built-in updater checks for new releases and installs them in-app</td>
-  </tr>
-  <tr>
-    <td align="center">&#x1F4BB;</td>
-    <td><b>System tray &amp; autostart</b><br>Minimize to tray, launch on Windows startup</td>
-  </tr>
+<tr>
+<td width="50%" valign="top">
+
+### &#x1F6E1;&#xFE0F; Multi-Protocol Engine
+Powered by [sing-box](https://github.com/SagerNet/sing-box) core.
+Supports **VLESS** &middot; **VMess** &middot; **Trojan** &middot; **Shadowsocks** &middot; **Reality** out of the box.
+
+### &#x1F9E9; Smart Split Tunneling
+Route traffic per-app, per-folder, or per-CIDR.
+Pick from installed apps or live running processes.
+
+### &#x1F512; Kill Switch
+Hardware-level protection &mdash; Windows Firewall blocks **all** egress unless it goes through the VPN tunnel.
+
+### &#x1F310; Multi-Hop
+Chain multiple servers for an additional layer of anonymity.
+
+</td>
+<td width="50%" valign="top">
+
+### &#x1F4E5; Universal Import
+Paste a share-URI list, Base64 blob, Clash YAML, or native sing-box JSON &mdash; everything auto-detected.
+
+### &#x1F3A8; Premium UI / UX
+Frameless dark window, iOS-style fold animations, live RTT ping, traffic quota bar, customizable accent themes.
+
+### &#x1F504; Auto Updates
+Built-in updater checks for new releases and installs seamlessly in-app.
+
+### &#x1F4BB; System Integration
+Minimize to system tray, launch on Windows startup, native notifications.
+
+</td>
+</tr>
 </table>
 
 <br>
 
 ## Download
 
-> **System requirements:** Windows 10 (1809+) or Windows 11, x64
-
 <div align="center">
 
-### [&#x2B07;&#xFE0F;&ensp;Download latest installer](https://github.com/M1ntVPN/mint/actions/workflows/build.yml)
+> **Windows 10** (1809+) or **Windows 11** &mdash; x64
 
-Download **`Mint.VPN_x64-setup.exe`** from the latest successful CI build artifacts.
+<br>
 
-A portable **`Mint VPN-Windows-Portable-x64.zip`** is also available.
+<a href="https://getmint.club">
+  <img src="https://img.shields.io/badge/&#x1F310;%20Website-getmint.club-8b5cf6?style=for-the-badge" alt="Website" />
+</a>
+&emsp;
+<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml">
+  <img src="https://img.shields.io/badge/&#x2B07;&#xFE0F;%20Installer-NSIS%20Setup%20(.exe)-0078D6?style=for-the-badge" alt="Installer" />
+</a>
+&emsp;
+<a href="https://github.com/M1ntVPN/mint/actions/workflows/build.yml">
+  <img src="https://img.shields.io/badge/&#x1F4E6;%20Portable-ZIP%20Archive-6366f1?style=for-the-badge" alt="Portable" />
+</a>
+
+<br>
+<br>
+
+<sub>Download artifacts from the latest successful CI build, or visit <a href="https://getmint.club"><b>getmint.club</b></a></sub>
 
 </div>
 
 <br>
 
-## Quick start
+## Quick Start
 
 ```
-1.  Open Mint VPN
-2.  Go to Profiles  ->  paste a subscription URL  ->  Import
-3.  Select a server from the list
-4.  Hit Connect
+1.  Launch Mint VPN
+2.  Profiles  →  paste subscription URL  →  Import
+3.  Pick a server
+4.  Connect
 ```
 
 <br>
 
-## Tech stack
+## Tech Stack
 
 | Layer | Technology |
-|:------|:-----------|
-| Native shell | **Tauri 2** (Rust) |
-| UI | **React 19** &middot; Framer Motion &middot; Tailwind v4 &middot; Zustand |
-| VPN engine | **sing-box** sidecar |
-| Build | Vite 7 &middot; TypeScript 5.9 &middot; Cargo |
-| Packaging | NSIS installer &mdash; EN / RU language selector, LZMA compression |
+|:--|:--|
+| **Desktop shell** | [Tauri 2](https://tauri.app) &mdash; Rust |
+| **Frontend** | [React 19](https://react.dev) &middot; Framer Motion &middot; Tailwind v4 &middot; Zustand |
+| **VPN core** | [sing-box](https://github.com/SagerNet/sing-box) sidecar |
+| **Tooling** | Vite 7 &middot; TypeScript 5.9 &middot; Cargo |
+| **Installer** | NSIS &mdash; EN / RU language selector, LZMA compression |
 
 <br>
 
 ## Development
 
 ```bash
-# Clone
-git clone https://github.com/M1ntVPN/mint.git
-cd mint
-
-# Install dependencies
-npm install
-
-# Development mode
-npm run tauri:dev
-
-# Production build
-npm run tauri:build
-# -> src-tauri/target/release/bundle/nsis/Mint.VPN_*_x64-setup.exe
+git clone https://github.com/M1ntVPN/mint.git && cd mint
+npm install          # install frontend deps
+npm run tauri:dev    # development mode with hot reload
+npm run tauri:build  # production build → src-tauri/target/release/bundle/nsis/
 ```
 
-**Prerequisites:** Node 20+, Rust stable, [Tauri prerequisites](https://tauri.app/start/prerequisites/)
+**Prerequisites:** Node 20+, Rust stable, [Tauri v2 prerequisites](https://tauri.app/start/prerequisites/)
 
 <br>
 
-## Project structure
+## Project Layout
 
 ```
 mint/
-├── src/                  # React frontend
-│   ├── components/       # UI components (Dashboard, Sidebar, Settings ...)
-│   ├── store/            # Zustand state (servers, tunneling, settings)
-│   ├── engine/           # sing-box integration layer
-│   └── assets/           # Backgrounds & textures
-├── src-tauri/            # Rust backend (Tauri commands, tray, firewall)
-├── .github/workflows/    # CI — build & publish artifacts
+├── src/                  # React UI
+│   ├── components/       # Dashboard, Sidebar, Settings, Tunneling …
+│   ├── store/            # Zustand stores (servers, settings, tunneling)
+│   ├── engine/           # sing-box IPC layer
+│   └── assets/           # Backgrounds, textures
+├── src-tauri/            # Rust backend — Tauri commands, tray, firewall
+├── .github/workflows/    # CI — build & publish
 └── package.json
 ```
 
@@ -152,12 +173,17 @@ mint/
 
 ## License
 
-[MIT](https://opensource.org/licenses/MIT) &copy; 2025 &ndash; present M1ntVPN
+[MIT](https://opensource.org/licenses/MIT) &copy; 2025 M1ntVPN
 
 <br>
 
 <div align="center">
 
-<sub>Built with Tauri 2 &middot; Powered by sing-box</sub>
+<a href="https://getmint.club"><b>getmint.club</b></a>
+
+<br>
+<br>
+
+<sub>Built with <a href="https://tauri.app">Tauri</a> &middot; Powered by <a href="https://github.com/SagerNet/sing-box">sing-box</a></sub>
 
 </div>
