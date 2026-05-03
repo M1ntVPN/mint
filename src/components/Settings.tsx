@@ -46,7 +46,7 @@ const ALL_CATEGORIES: {
   { key: "security", label: "Безопасность", icon: ShieldCheck, desktopOnly: true },
   { key: "network", label: "Сеть и DNS", icon: Globe },
   { key: "connection", label: "Соединение", icon: Wifi },
-  { key: "updates", label: "Обновления", icon: Sparkles, desktopOnly: true },
+  { key: "updates", label: "Обновления", icon: Sparkles },
 ];
 
 interface SettingsPageProps {
@@ -421,6 +421,10 @@ function ConfirmationsSection() {
 
 function SecuritySection() {
   const [killSwitch, setKillSwitch] = useSetting<boolean>("mint.killSwitch", false);
+  const [useSystemProxy, setUseSystemProxy] = useSetting<boolean>(
+    "mint.useSystemProxy",
+    false
+  );
   const vpnActive = useConnection((s) => s.state === "connected");
 
   const onToggle = async (v: boolean) => {
@@ -436,12 +440,37 @@ function SecuritySection() {
     }
   };
 
+  const onToggleSysproxy = async (v: boolean) => {
+    setUseSystemProxy(v);
+    if (!v) {
+      try {
+        await invoke("sysproxy_clear_if_local");
+      } catch (e) {
+        console.warn("sysproxy_clear_if_local failed", e);
+      }
+    }
+  };
+
   return (
-    <SectionCard icon={ShieldCheck} title="Kill-switch">
-      <RowWrap label="Блокировать интернет при обрыве VPN">
-        <Toggle value={killSwitch} onChange={onToggle} />
-      </RowWrap>
-    </SectionCard>
+    <>
+      <SectionCard icon={ShieldCheck} title="Kill-switch">
+        <RowWrap label="Блокировать интернет при обрыве VPN">
+          <Toggle value={killSwitch} onChange={onToggle} />
+        </RowWrap>
+      </SectionCard>
+      <SectionCard icon={Globe} title="Системный прокси">
+        <RowWrap
+          label="Включать системный прокси при подключении"
+          desc={
+            "По умолчанию выключено. Mint использует TUN — sing-box перехватывает\n" +
+            "весь трафик через wintun. Системный прокси на 127.0.0.1:7890 нужен\n" +
+            "только если у тебя есть приложения, которые игнорируют маршруты ОС."
+          }
+        >
+          <Toggle value={useSystemProxy} onChange={onToggleSysproxy} />
+        </RowWrap>
+      </SectionCard>
+    </>
   );
 }
 
@@ -655,7 +684,9 @@ function UpdatesSection({
                   ? "Скачивание…"
                   : updateBusy === "installing"
                     ? "Установка…"
-                    : "Обновить"}
+                    : isMobilePlatform()
+                      ? "Скачать APK"
+                      : "Обновить"}
               </button>
             </div>
           )}
