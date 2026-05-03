@@ -48,23 +48,43 @@ android {
             }
         }
         getByName("release") {
-            isMinifyEnabled = true
+            // R8 keeps stripping classes that libbox/Tauri load via reflection
+            // even with broad keep rules, which manifests as
+            // ClassNotFoundException at startup on some emulators (Nox). Until
+            // we have a comprehensive R8 ruleset that survives a real device
+            // matrix, ship release builds without minification — the size
+            // overhead (~5-10 MB on a 195 MB APK) is acceptable.
+            isMinifyEnabled = false
             val releaseSigning = signingConfigs.findByName("release")
             if (releaseSigning != null) {
                 signingConfig = releaseSigning
             }
-            proguardFiles(
-                *fileTree(".") { include("**/*.pro") }
-                    .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
-                    .toList().toTypedArray()
-            )
         }
     }
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    compileOptions {
+        // Backport java.lang.invoke.* (BootstrapMethodError, MethodHandle,
+        // etc.) onto API 24/25. The default Android runtime added these in
+        // API 26 (Oreo). PluginManager / Tauri / Kotlin-generated code
+        // reference them via invokedynamic, so without desugaring the app
+        // crashes at startup on Android 7.x with NoClassDefFoundError.
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
     buildFeatures {
         buildConfig = true
+    }
+    packaging {
+        jniLibs {
+            // Older Android (API 24-25, including some Nox builds) and a few
+            // OEM ROMs choke on uncompressed shared libraries (the modern
+            // default) when the APK is sideloaded. Force-extract native libs
+            // so libbox.so / libmint_lib.so are guaranteed to load.
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -77,6 +97,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
