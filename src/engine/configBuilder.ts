@@ -194,8 +194,12 @@ export function buildSingboxConfig(opts: BuildOptions): string {
             tag: "tun-in",
             auto_route: true,
             strict_route: true,
-            inet4_address: "172.19.0.1/30",
-            inet6_address: "fdfe:dcba:9876::1/126",
+            // sing-box 1.10 deprecated the split inet4_address /
+            // inet6_address fields in favour of a single `address` array;
+            // the old fields are removed in 1.12 and produce a `[migration]`
+            // WARN in 1.10–1.11. We use the new shape unconditionally
+            // because both Android and desktop sidecars are now ≥1.10.
+            address: ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
             stack: "mixed",
             sniff: true,
             sniff_override_destination: true,
@@ -227,8 +231,7 @@ export function buildSingboxConfig(opts: BuildOptions): string {
             tag: "tun-in",
             auto_route: true,
             strict_route: true,
-            inet4_address: "172.19.0.1/30",
-            inet6_address: "fdfe:dcba:9876::1/126",
+            address: ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
             stack: "gvisor",
             sniff: true,
             sniff_override_destination: true,
