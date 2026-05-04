@@ -3,15 +3,21 @@ import {
   LayoutGrid,
   Settings as SettingsIcon,
   ScrollText,
-  Split,
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import type { PageKey } from "./Sidebar";
 
+// `tunneling` is intentionally absent: per-app routing requires the
+// `disallowedApplications` builder on Android's VpnService and is wired
+// through tauri-plugin-mintvpn's `start_vpn` args, but we do NOT expose
+// the rules-editor UI on Android because (a) the desktop UI assumes an
+// IP/CIDR + process-name model that doesn't translate to Android (where
+// the unit is the package name, not a route), and (b) the user
+// explicitly asked to hide this tab on mobile. Desktop sidebar still
+// shows it via `Sidebar.tsx`.
 const NAV: { key: PageKey; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { key: "home", label: "Главная", icon: Power },
   { key: "profiles", label: "Профили", icon: LayoutGrid },
-  { key: "tunneling", label: "Туннели", icon: Split },
   { key: "settings", label: "Настройки", icon: SettingsIcon },
   { key: "logs", label: "Логи", icon: ScrollText },
 ];

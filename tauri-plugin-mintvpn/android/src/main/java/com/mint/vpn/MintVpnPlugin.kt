@@ -32,11 +32,23 @@ class StartVpnArgs {
 /**
  * Bridges Mint VPN's React UI to the Android system VPN tunnel.
  *
- * Commands:
- *  - `prepare_vpn` — request `BIND_VPN_SERVICE` consent if not already granted.
- *  - `start_vpn`   — boot [MintVpnService] with the provided sing-box JSON config.
- *  - `stop_vpn`    — tear down the tunnel and stop the foreground service.
- *  - `vpn_status`  — report whether the engine is currently running.
+ * Commands (named in camelCase to match Tauri's command-routing pipeline:
+ * `tauri::webview::mod.rs:1870` runs `heck::AsLowerCamelCase(message.command)`
+ * on every plugin command before dispatching it to the Android plugin
+ * registry, so a Kotlin function called `prepare_vpn` would be looked up
+ * as `prepareVpn` and 404 with `No command prepareVpn found for plugin
+ * com.mint.vpn.MintVpnPlugin` — which is exactly the bug 0.3.4 shipped
+ * with):
+ *
+ *  - `prepareVpn`        — request `BIND_VPN_SERVICE` consent if not already granted.
+ *  - `startVpn`          — boot [MintVpnService] with the provided sing-box JSON config.
+ *  - `stopVpn`           — tear down the tunnel and stop the foreground service.
+ *  - `vpnStatus`         — report whether the engine is currently running.
+ *  - `listInstalledApps` — enumerate user-installed apps for the per-app routing UI.
+ *
+ * The JS-side `invoke("plugin:mintvpn|prepare_vpn")` continues to use
+ * snake_case because that's what the rest of the codebase uses; Tauri
+ * does the snake→camel conversion for us before it gets here.
  */
 @TauriPlugin
 class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
@@ -48,7 +60,7 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
-    fun prepare_vpn(invoke: Invoke) {
+    fun prepareVpn(invoke: Invoke) {
         activity.runOnUiThread {
             val intent = VpnService.prepare(activity)
             if (intent != null) {
@@ -69,7 +81,7 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
-    fun start_vpn(invoke: Invoke) {
+    fun startVpn(invoke: Invoke) {
         val args = invoke.parseArgs(StartVpnArgs::class.java)
         activity.runOnUiThread {
             val prepareIntent = VpnService.prepare(activity)
@@ -95,7 +107,7 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
-    fun stop_vpn(invoke: Invoke) {
+    fun stopVpn(invoke: Invoke) {
         activity.runOnUiThread {
             val intent = Intent(activity, MintVpnService::class.java).apply {
                 action = MintVpnService.ACTION_STOP
@@ -108,7 +120,7 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
-    fun vpn_status(invoke: Invoke) {
+    fun vpnStatus(invoke: Invoke) {
         val ret = JSObject()
         ret.put("running", MintVpnService.isRunning())
         MintVpnService.lastError?.let { ret.put("errorMsg", it) }
@@ -116,7 +128,7 @@ class MintVpnPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
-    fun list_installed_apps(invoke: Invoke) {
+    fun listInstalledApps(invoke: Invoke) {
         Thread {
             try {
                 val pm = activity.packageManager
