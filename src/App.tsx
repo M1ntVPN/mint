@@ -577,25 +577,75 @@ function App() {
   }, [state]);
 
   useEffect(() => {
+    // Re-apply tunneling config to the running engine when the user
+    // changes mode / rules / folders. The naive version of this only
+    // called `restartTunnel()` on the trailing edge of a 600ms debounce
+    // — which silently dropped any change made *during* the restart
+    // because `restartTunnel` early-returns when `toggleInFlightRef` is
+    // set. The user reported this as "чтобы туннелирование сработало
+    // надо несколько раз выключить сервер": they would toggle a rule,
+    // the restart kicks off, they toggle a second rule mid-restart, and
+    // the second toggle never made it into the rebuilt config.
+    //
+    // We fix it by tracking a "dirty since last restart" flag; if the
+    // flag is set when restart finishes, we kick off another one. The
+    // signature is recomputed inside the scheduler so we always rebuild
+    // with whatever the latest store contents are at the moment we
+    // decide to restart.
     let prev = serializeTunnelingConfig(useTunneling.getState());
     let timer: number | undefined;
+    let restarting = false;
+    let dirty = false;
+
+    const scheduleRestart = () => {
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        if (state !== "connected") return;
+        if (restarting) {
+          // A previous restart is still in flight. Mark the config
+          // dirty; runRestart's tail will pick it up.
+          dirty = true;
+          return;
+        }
+        void runRestart();
+      }, 600);
+    };
+
+    const runRestart = async () => {
+      restarting = true;
+      try {
+        do {
+          dirty = false;
+          const log = useLogs.getState().push;
+          const t = new Date().toISOString().slice(11, 23);
+          log({
+            t,
+            lvl: "INFO",
+            src: "engine",
+            msg: "Перезапуск туннеля: изменены настройки туннелирования",
+          });
+          try {
+            await restartTunnel();
+          } catch {
+            // restartTunnel already logs; just stop the loop.
+            break;
+          }
+          // If config changed while we were restarting, loop and
+          // restart again so the latest rules are actually applied.
+        } while (dirty);
+      } finally {
+        restarting = false;
+      }
+    };
+
     const unsub = useTunneling.subscribe((next) => {
       const sig = serializeTunnelingConfig(next);
       if (sig === prev) return;
       prev = sig;
       if (state !== "connected") return;
-      if (timer != null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        const log = useLogs.getState().push;
-        const t = new Date().toISOString().slice(11, 23);
-        log({
-          t,
-          lvl: "INFO",
-          src: "engine",
-          msg: "Перезапуск туннеля: изменены настройки туннелирования",
-        });
-        restartTunnel().catch(() => undefined);
-      }, 600);
+      dirty = true;
+      scheduleRestart();
     });
     return () => {
       unsub();

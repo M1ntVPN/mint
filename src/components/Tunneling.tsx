@@ -856,6 +856,23 @@ function AppPickerModal({
     load(src);
   }, [open, src]);
 
+  // Live-refresh the "Запущенные" list while the picker is open. The
+  // OS process table changes constantly (the user explicitly reported
+  // "нет автоматического обновления запущенных процессов" — they
+  // launched something with the modal already open and it never showed
+  // up). 2.5s is fast enough to feel live but slow enough that the
+  // backend `EnumProcesses + IconExtraction` call on Windows doesn't
+  // hammer the system. We do NOT poll the "installed" tab because that
+  // table only changes on install / uninstall and is much more
+  // expensive to enumerate.
+  useEffect(() => {
+    if (!open || src !== "running") return;
+    const id = window.setInterval(() => {
+      void load("running", true);
+    }, 2500);
+    return () => window.clearInterval(id);
+  }, [open, src]);
+
   const items = useMemo<Omit<AppRule, "id" | "via">[]>(() => {
     const q = query.trim().toLowerCase();
     const matchq = (name: string, exe: string) =>
