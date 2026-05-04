@@ -396,13 +396,17 @@ function App() {
     }
   };
 
+  const doRestartInternal = async (overrideExitId?: string) => {
+    await doDisconnect({ silent: true, clearKillswitch: false });
+    await new Promise((r) => window.setTimeout(r, 500));
+    await doConnect(overrideExitId);
+  };
+
   const restartTunnel = async (overrideExitId?: string) => {
     if (toggleInFlightRef.current) return;
     toggleInFlightRef.current = true;
     try {
-      await doDisconnect({ silent: true, clearKillswitch: false });
-      await new Promise((r) => window.setTimeout(r, 500));
-      await doConnect(overrideExitId);
+      await doRestartInternal(overrideExitId);
     } finally {
       window.setTimeout(() => {
         toggleInFlightRef.current = false;
@@ -625,14 +629,20 @@ function App() {
             src: "engine",
             msg: "Перезапуск туннеля: изменены настройки туннелирования",
           });
-          try {
-            await restartTunnel();
-          } catch {
-            // restartTunnel already logs; just stop the loop.
-            break;
+          // Wait for any user-initiated toggle to finish, then claim
+          // the lock ourselves so the internal restart doesn't race
+          // with button presses.
+          while (toggleInFlightRef.current) {
+            await new Promise((r) => window.setTimeout(r, 100));
           }
-          // If config changed while we were restarting, loop and
-          // restart again so the latest rules are actually applied.
+          toggleInFlightRef.current = true;
+          try {
+            await doRestartInternal();
+          } catch {
+            break;
+          } finally {
+            toggleInFlightRef.current = false;
+          }
         } while (dirty);
       } finally {
         restarting = false;
@@ -847,6 +857,18 @@ function App() {
       if (!inst) {
         setUpdateError("Не удалось получить информацию об обновлении.");
         return;
+      }
+      if (state === "connected" || state === "connecting") {
+        try {
+          await doDisconnect({ silent: true });
+        } catch (e) {
+          log({
+            t: ts(),
+            lvl: "WARN",
+            src: "updater",
+            msg: `pre-update disconnect failed: ${(e as Error)?.message ?? e}`,
+          });
+        }
       }
       try {
         await invoke("prepare_for_update");

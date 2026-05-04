@@ -297,30 +297,14 @@ function TunnelingDesktop() {
   const renameFolder = useTunneling((s) => s.renameFolder);
   const removeFolder = useTunneling((s) => s.removeFolder);
 
+  const collapsedIds = useTunneling((s) => s.collapsedIds);
+  const toggleCollapsed = useTunneling((s) => s.toggleCollapsed);
+
   const [newPattern, setNewPattern] = useState("");
   const [newVia, setNewVia] = useState<"vpn" | "bypass">("bypass");
   const [addAppOpen, setAddAppOpen] = useState(false);
   const [appQuery, setAppQuery] = useState("");
   const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
-  const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setOpenMap((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const f of folders) {
-        if (next[f.id] === undefined) {
-          next[f.id] = true;
-          changed = true;
-        }
-      }
-      if (next["__loose__"] === undefined) {
-        next["__loose__"] = true;
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [folders]);
 
   const addNet = () => {
     const p = newPattern.trim();
@@ -476,7 +460,7 @@ function TunnelingDesktop() {
     }
     setConfirmDialog({
       title: `Удалить папку «${folder.name}»?`,
-      body: "Приложения внутри останутся в общем списке — удалится только группировка.",
+      body: `Папка и все ${items.length} приложени${items.length === 1 ? "е" : items.length < 5 ? "я" : "й"} внутри будут удалены из списка туннелирования.`,
       confirmLabel: "Удалить",
       destructive: true,
       onOk: () => removeFolder(folder.id),
@@ -639,7 +623,7 @@ function TunnelingDesktop() {
           <div className="space-y-2">
             {folders.map((folder) => {
               const items = grouped.byFolder.get(folder.id) ?? [];
-              const isOpen = openMap[folder.id] ?? true;
+              const isOpen = !collapsedIds.includes(folder.id);
               return (
                 <FolderGroup
                   key={folder.id}
@@ -648,9 +632,7 @@ function TunnelingDesktop() {
                   mode={mode}
                   isOpen={isOpen}
                   allFolders={folders}
-                  onToggle={() =>
-                    setOpenMap((m) => ({ ...m, [folder.id]: !isOpen }))
-                  }
+                  onToggle={() => toggleCollapsed(folder.id)}
                   onRename={(name) => renameFolder(folder.id, name)}
                   onDelete={() => askRemoveFolder(folder)}
                   onAddInto={() => openAddAppInto(folder.id)}
@@ -665,15 +647,10 @@ function TunnelingDesktop() {
               <LooseGroup
                 apps={grouped.loose}
                 mode={mode}
-                isOpen={openMap["__loose__"] ?? true}
+                isOpen={!collapsedIds.includes("__loose__")}
                 allFolders={folders}
                 hasFolders={folders.length > 0}
-                onToggle={() =>
-                  setOpenMap((m) => ({
-                    ...m,
-                    __loose__: !(m["__loose__"] ?? true),
-                  }))
-                }
+                onToggle={() => toggleCollapsed("__loose__")}
                 onFlip={flipApp}
                 onRemove={askRemoveApp}
                 onMove={moveApp}
@@ -1400,7 +1377,7 @@ function FolderGroup({
             setDraft(folder.name);
             setEditing(true);
           }}
-          className="opacity-0 group-hover:opacity-100 w-7 h-7 grid place-items-center rounded-md hover:bg-white/5 text-white/55 hover:text-white transition"
+          className="opacity-40 group-hover:opacity-100 w-7 h-7 grid place-items-center rounded-md hover:bg-white/5 text-white/55 hover:text-white transition"
           title="Переименовать папку"
         >
           <Edit2 size={13} />
@@ -1410,7 +1387,7 @@ function FolderGroup({
             e.stopPropagation();
             onDelete();
           }}
-          className="opacity-0 group-hover:opacity-100 w-7 h-7 grid place-items-center rounded-md hover:bg-rose-500/15 text-white/55 hover:text-rose-300 transition"
+          className="opacity-40 group-hover:opacity-100 w-7 h-7 grid place-items-center rounded-md hover:bg-rose-500/15 text-white/55 hover:text-rose-300 transition"
           title="Удалить папку"
         >
           <Trash2 size={13} />

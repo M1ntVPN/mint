@@ -32,6 +32,7 @@ interface TunnelingState {
   apps: AppRule[];
   nets: NetRule[];
   folders: AppFolder[];
+  collapsedIds: string[];
   setMode: (m: TunnelMode) => void;
   addApp: (
     entry: Omit<AppRule, "id" | "via" | "folderId">,
@@ -46,6 +47,7 @@ interface TunnelingState {
   createFolder: (name: string) => string;
   renameFolder: (id: string, name: string) => void;
   removeFolder: (id: string) => void;
+  toggleCollapsed: (id: string) => void;
 }
 
 export const useTunneling = create<TunnelingState>()(
@@ -55,6 +57,7 @@ export const useTunneling = create<TunnelingState>()(
       apps: [],
       nets: [],
       folders: [],
+      collapsedIds: [],
       setMode: (m) => set({ mode: m }),
       addApp: (entry, defaultVia, folderId) =>
         set((st) => {
@@ -124,9 +127,14 @@ export const useTunneling = create<TunnelingState>()(
       removeFolder: (id) =>
         set((st) => ({
           folders: st.folders.filter((f) => f.id !== id),
-          apps: st.apps.map((a) =>
-            a.folderId === id ? { ...a, folderId: null } : a
-          ),
+          apps: st.apps.filter((a) => a.folderId !== id),
+          collapsedIds: st.collapsedIds.filter((x) => x !== id),
+        })),
+      toggleCollapsed: (id) =>
+        set((st) => ({
+          collapsedIds: st.collapsedIds.includes(id)
+            ? st.collapsedIds.filter((x) => x !== id)
+            : [...st.collapsedIds, id],
         })),
     }),
     { name: "mint.tunneling.v1", version: 1 }
