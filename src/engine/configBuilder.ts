@@ -262,15 +262,22 @@ export function buildSingboxConfig(opts: BuildOptions): string {
         rules: baseRules,
         final: finalOut,
         auto_detect_interface: true,
-        // Force every outbound's server hostname (the VPN node, plus any
-        // `direct`-routed hosts like update servers) to be resolved by
-        // the `direct` DNS — i.e. Cloudflare DoH at IP 1.1.1.1 — rather
-        // than the OS system resolver. On Russian ISPs the system DNS
-        // returns hijacked answers for VPN-related hostnames; this
-        // setting routes around that without depending on user config.
-        // Available as `route.default_domain_resolver` since sing-box
-        // 1.13. We're on 1.13.11 (see scripts/build-libbox.sh).
-        default_domain_resolver: { server: "direct" },
+        // NOTE: we deliberately do NOT set `route.default_domain_resolver`
+        // here. That field only exists in sing-box ≥1.13, but the desktop
+        // sidecar shipped via `.github/workflows/build.yml` is pinned to
+        // 1.10.7 (see SINGBOX_VERSION there). On 1.10.7 the field is
+        // rejected as `unknown field "default_domain_resolver"` and the
+        // whole config fails to load (exit code 1 immediately on
+        // Connect — exactly what 0.3.4 shipped with by accident).
+        //
+        // Outbound-server hostname resolution is steered to `direct`
+        // instead through the `dns.rules` entry `{ outbound: ["any"],
+        // server: "direct" }` above, which has been part of the DNS
+        // schema since long before 1.10 and behaves the same as the
+        // 1.13 `default_domain_resolver` for our purposes. Once we
+        // bump the desktop sing-box to ≥1.13 we can re-introduce
+        // `default_domain_resolver` for parity, but it's not necessary
+        // for the RKN-bypass goal of this fix.
       };
     })(),
   };
