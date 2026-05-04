@@ -150,6 +150,18 @@ export function buildSingboxConfig(opts: BuildOptions): string {
           // optional "Использовать системный прокси" toggle (Settings ->
           // Безопасность) which legacy Win32 apps that ignore routing
           // rules occasionally need.
+          //
+          // `stack: "gvisor"` (userspace TCP/IP) instead of "mixed":
+          // sing-box's `mixed` stack uses the OS network stack for
+          // UDP/ICMP, which on Windows triggers a Windows Firewall
+          // rule-add ("fix windows firewall for system stack: Error
+          // adding Rule") that fails on machines where the firewall
+          // service is restricted, AV-managed, or governed by group
+          // policy — the user just sees sing-box exit with code 1
+          // immediately on Connect. Hiddify hit the same issue (see
+          // hiddify-app #1224 / #1342) and shipped `gvisor` as the
+          // Windows default. gvisor is fully userspace, never touches
+          // the firewall, and is the safest cross-version choice.
           {
             type: "tun",
             tag: "tun-in",
@@ -157,7 +169,7 @@ export function buildSingboxConfig(opts: BuildOptions): string {
             strict_route: true,
             inet4_address: "172.19.0.1/30",
             inet6_address: "fdfe:dcba:9876::1/126",
-            stack: "mixed",
+            stack: "gvisor",
             sniff: true,
             sniff_override_destination: true,
             mtu: 9000,

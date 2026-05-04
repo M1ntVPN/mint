@@ -343,6 +343,28 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                       <div className="text-[12px] text-white/35 px-2 py-1.5 pt-1">
                         Пусто — переместите сюда сервер из общего списка.
                       </div>
+                    ) : query || protoFilter !== "all" ? (
+                      // While the user is filtering, render a plain list
+                      // instead of a Reorder.Group. Reorder.Item runs a
+                      // layout animation whenever its parent's `values`
+                      // array changes, which is great for drag-to-reorder
+                      // but means every keystroke in the search box (or
+                      // every protocol filter switch) reshuffles the
+                      // remaining rows with a 200ms spring transition —
+                      // visually that reads as cards "stretching" /
+                      // sliding around the page on every typed character.
+                      // DnD makes no sense on a partial list anyway, so
+                      // we drop into a plain div for the filtered view.
+                      <div className="space-y-1">
+                        {filtered.map((s) => (
+                          <ServerRow
+                            key={s.id}
+                            server={s}
+                            selected={selectedId === s.id}
+                            onSelect={() => onSelect(s.id)}
+                          />
+                        ))}
+                      </div>
                     ) : (
                       <Reorder.Group
                         axis="y"
@@ -374,23 +396,39 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
         })}
       </Reorder.Group>
 
-      {looseServers.filter(matches).length > 0 && (
-        <Reorder.Group
-          axis="y"
-          values={looseServers.filter(matches)}
-          onReorder={(next) => reorderLooseServers(next.map((s) => s.id))}
-          className="space-y-1.5"
-        >
-          {looseServers.filter(matches).map((s) => (
-            <ServerReorderItem
-              key={s.id}
-              server={s}
-              selected={selectedId === s.id}
-              onSelect={() => onSelect(s.id)}
-            />
-          ))}
-        </Reorder.Group>
-      )}
+      {looseServers.filter(matches).length > 0 &&
+        (query || protoFilter !== "all" ? (
+          // Same reasoning as the per-folder list above: skip the
+          // Reorder.Group while the user is filtering, otherwise every
+          // keystroke triggers a `layout` animation that reflows the
+          // visible rows.
+          <div className="space-y-1.5">
+            {looseServers.filter(matches).map((s) => (
+              <ServerRow
+                key={s.id}
+                server={s}
+                selected={selectedId === s.id}
+                onSelect={() => onSelect(s.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <Reorder.Group
+            axis="y"
+            values={looseServers.filter(matches)}
+            onReorder={(next) => reorderLooseServers(next.map((s) => s.id))}
+            className="space-y-1.5"
+          >
+            {looseServers.filter(matches).map((s) => (
+              <ServerReorderItem
+                key={s.id}
+                server={s}
+                selected={selectedId === s.id}
+                onSelect={() => onSelect(s.id)}
+              />
+            ))}
+          </Reorder.Group>
+        ))}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 {
   "name": "mint-vpn",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "description": "Mint VPN — modern, polished VPN desktop client built on Tauri 2 + React 19. Sing-box engine, split-tunneling, killswitch, premium UI.",
   "author": "M1ntVPN",
@@ -55,6 +55,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@csstools/postcss-cascade-layers": "^6.0.0",
     "@tailwindcss/vite": "4.1.17",
     "@tauri-apps/cli": "^2.10.1",
     "@types/node": "22.19.17",

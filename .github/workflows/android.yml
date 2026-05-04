@@ -211,10 +211,26 @@ jobs:
             cp "${{ steps.aab.outputs.path }}" "mint-vpn-${TAG}.aab"
           fi
 
+      # Mark Android releases as `prerelease=true`. Without this, the
+      # `/releases/latest` API/redirect picks the most recently published
+      # release regardless of OS, and Android tags would shadow the
+      # latest Windows release — breaking the desktop updater (which
+      # fetches `/releases/latest/download/latest.json` and 404s when
+      # the latest release is an Android one). Marking Android tags as
+      # prerelease keeps them out of the "latest" pool while still
+      # reachable by tag URL and by the in-app Android updater (which
+      # iterates all releases looking for `v*-android` tags).
+      #
+      # We previously had a separate `mark-android-prerelease.yml`
+      # workflow that flipped this flag after publish, but `release`
+      # events fired from GITHUB_TOKEN-authored API calls deliberately
+      # do NOT trigger downstream workflows, so it never ran. Setting
+      # `prerelease: true` here is the deterministic fix.
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
           files: |
             mint-vpn-*.apk
             mint-vpn-*.aab
