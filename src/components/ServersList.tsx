@@ -651,8 +651,10 @@ function FolderHeader({
       )}
 
       {subscription && pct !== null ? (
+        // Real progress bar: known used + total → colored fill scaled
+        // to `pct` with the numbers centered on top.
         <div
-          className="flex-1 min-w-[120px] relative h-7 rounded-md bg-white/[0.06] overflow-hidden"
+          className="flex-1 min-w-[88px] relative h-7 rounded-md bg-white/[0.06] ring-1 ring-inset ring-white/[0.04] overflow-hidden"
           title={`${fmtBytes(used)} / ${fmtBytes(total)} (${pct.toFixed(1)}%)`}
         >
           <div
@@ -668,17 +670,34 @@ function FolderHeader({
             )}
             style={{ width: `${pct}%` }}
           />
-          <div className="absolute inset-0 flex items-center justify-center px-2.5 text-[11.5px] font-mono tabular-nums text-white whitespace-nowrap drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]">
-            {fmtBytes(used)} / {fmtBytes(total)} · {pct.toFixed(0)}%
+          {/* `min-w-0` on the flex parent + `truncate` on the span lets
+              the centered numeric text shrink with ellipsis instead of
+              being clipped mid-character (which is what users were
+              seeing on narrow Settings panes / portrait windows). */}
+          <div className="absolute inset-0 flex items-center justify-center px-2.5 min-w-0">
+            <span className="text-[11.5px] font-mono tabular-nums text-white truncate drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]">
+              {fmtBytes(used)} / {fmtBytes(total)} · {pct.toFixed(0)}%
+            </span>
           </div>
         </div>
       ) : subscription ? (
+        // Subscribed but quota total is unknown: render the same
+        // strip but with a soft accent gradient at full width (so it
+        // reads as "active" rather than "empty bar with a number")
+        // and just the used amount centered. Without the gradient
+        // the bar looked broken on wide windows (huge dark slot with
+        // a tiny number floating in the middle), and the previous
+        // "X GB использовано" text was being clipped
+        // mid-character on narrow ones.
         <div
-          className="flex-1 min-w-[120px] relative h-7 rounded-md bg-white/[0.06] overflow-hidden"
-          title={`${fmtBytes(used)} использовано`}
+          className="flex-1 min-w-[88px] relative h-7 rounded-md bg-white/[0.06] ring-1 ring-inset ring-white/[0.04] overflow-hidden"
+          title={`Использовано ${fmtBytes(used)}`}
         >
-          <div className="absolute inset-0 flex items-center justify-center px-2.5 text-[11.5px] font-mono tabular-nums text-white/85 whitespace-nowrap">
-            {fmtBytes(used)} использовано
+          <div className="absolute inset-0 bg-gradient-to-r from-violet-500/30 via-violet-500/15 to-transparent" />
+          <div className="absolute inset-0 flex items-center justify-center px-2.5 min-w-0">
+            <span className="text-[11.5px] font-mono tabular-nums text-white/90 truncate">
+              {fmtBytes(used)}
+            </span>
           </div>
         </div>
       ) : (
