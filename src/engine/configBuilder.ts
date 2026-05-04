@@ -91,8 +91,21 @@ export function buildSingboxConfig(opts: BuildOptions): string {
     exit,
     entry,
     apiSecret = "",
+    // Defaults are deliberately set to *IP-addressed* DoH endpoints, not
+    // hostnames. If the default were `https://dns.cloudflare.com/dns-query`
+    // sing-box would have to resolve `dns.cloudflare.com` first, and on
+    // RKN-hijacked Russian networks the system resolver returns junk
+    // (we observed `premium-ru.geodema.network → 194.26.229.156` in user
+    // logs). With `https://1.1.1.1/dns-query` the IP is already known
+    // and no system-DNS bootstrap is needed.
     remoteDns = "https://1.1.1.1/dns-query",
-    localDns = "https://223.5.5.5/dns-query",
+    // Direct DNS used to be `https://223.5.5.5/dns-query` (AliDNS, China
+    // Telecom). That's a terrible default for non-China users — the
+    // server is China-firewalled outbound, so for users outside China
+    // it just times out. Fall back to the same Cloudflare 1.1.1.1
+    // endpoint used by `direct` (also IP-addressed, also bypasses the
+    // system resolver).
+    localDns = "https://1.1.1.1/dns-query",
     clashApiPort = CLASH_API_PORT,
     tunneling,
   } = opts;
@@ -117,15 +130,62 @@ export function buildSingboxConfig(opts: BuildOptions): string {
 
   const config: Record<string, unknown> = {
     log: { level: "warn", timestamp: true },
+    // DNS pipeline is deliberately three-tier (remote / direct / local)
+    // to defeat ISP-level DNS hijacking, which is rampant on Russian
+    // networks. We saw `premium-ru.geodema.network` get poisoned to
+    // `194.26.229.156` (Comss.one) in a user log — sing-box then tried
+    // to TLS-handshake the wrong server and exited with code 1. The
+    // fix is to never let the OS resolver answer hostnames that matter
+    // for VPN bring-up.
+    //
+    //   `local`  - tag for system DNS (Windows/Android resolver). Used
+    //              only as the bootstrap floor for resolving the
+    //              hostname of `direct`. If `direct` is an IP DoH (as
+    //              we default it), this is never actually consulted.
+    //
+    //   `direct` - Cloudflare DoH at the literal IP 1.1.1.1. No host-
+    //              name to resolve, so it can be reached without ever
+    //              touching the OS resolver. Used to resolve the
+    //              hostnames of (a) the `remote` DoH and (b) every
+    //              outbound's server, via `route.default_domain_resolver`.
+    //
+    //   `remote` - The user's chosen DoH (defaults to 1.1.1.1) routed
+    //              through `proxy` so once the tunnel is up, every
+    //              user app's DNS query goes through the VPN.
+    //
+    // The `address_resolver` chain (remote -> direct -> local) tells
+    // sing-box which lower tier to use for resolving each server's own
+    // hostname; the `route.default_domain_resolver` tells sing-box to
+    // resolve every *outbound* server's hostname via `direct` -> 1.1.1.1
+    // BEFORE the tunnel comes up. This is the same address-resolver
+    // pattern Hiddify uses (hiddify-core/v2/config/dns.go), trimmed
+    // down to the parts we actually need.
     dns: {
       servers: [
-        { tag: "remote", address: remoteDns, detour: "proxy" },
-        { tag: "local", address: localDns, detour: "direct" },
+        {
+          tag: "remote",
+          address: remoteDns,
+          address_resolver: "direct",
+          detour: "proxy",
+        },
+        {
+          tag: "direct",
+          address: localDns,
+          address_resolver: "local",
+          detour: "direct",
+        },
+        { tag: "local", address: "local" },
       ],
       rules: [
-        { outbound: ["any"], server: "local" },
+        // While the tunnel is being brought up, sing-box itself looks up
+        // the proxy server's hostname (e.g. premium-ru.geodema.network).
+        // Force that resolution through `direct` so it goes via the
+        // IP-addressed Cloudflare DoH instead of the (possibly hijacked)
+        // OS resolver.
+        { outbound: ["any"], server: "direct" },
       ],
       strategy: "prefer_ipv4",
+      independent_cache: true,
     },
     inbounds: isAndroid()
       ? [
@@ -202,6 +262,15 @@ export function buildSingboxConfig(opts: BuildOptions): string {
         rules: baseRules,
         final: finalOut,
         auto_detect_interface: true,
+        // Force every outbound's server hostname (the VPN node, plus any
+        // `direct`-routed hosts like update servers) to be resolved by
+        // the `direct` DNS — i.e. Cloudflare DoH at IP 1.1.1.1 — rather
+        // than the OS system resolver. On Russian ISPs the system DNS
+        // returns hijacked answers for VPN-related hostnames; this
+        // setting routes around that without depending on user config.
+        // Available as `route.default_domain_resolver` since sing-box
+        // 1.13. We're on 1.13.11 (see scripts/build-libbox.sh).
+        default_domain_resolver: { server: "direct" },
       };
     })(),
   };
