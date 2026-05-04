@@ -34,18 +34,23 @@ type CategoryKey =
   | "connection"
   | "updates";
 
+// Ordered from "core VPN behaviour" -> "system integration" -> "cosmetic"
+// -> "rarely touched". This matches the typical settings-screen mental
+// model used by Hiddify / Outline / WireGuard GUIs and matches the
+// frequency users open each tab (Connection / Network are touched
+// often, Updates almost never).
 const ALL_CATEGORIES: {
   key: CategoryKey;
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   desktopOnly?: boolean;
 }[] = [
-  { key: "appearance", label: "Внешний вид", icon: Palette },
+  { key: "connection", label: "Соединение", icon: Wifi },
+  { key: "network", label: "Сеть и DNS", icon: Globe },
+  { key: "security", label: "Безопасность", icon: ShieldCheck, desktopOnly: true },
   { key: "behavior", label: "Поведение", icon: MonitorCog, desktopOnly: true },
   { key: "confirmations", label: "Подтверждения", icon: HelpCircle },
-  { key: "security", label: "Безопасность", icon: ShieldCheck, desktopOnly: true },
-  { key: "network", label: "Сеть и DNS", icon: Globe },
-  { key: "connection", label: "Соединение", icon: Wifi },
+  { key: "appearance", label: "Внешний вид", icon: Palette },
   { key: "updates", label: "Обновления", icon: Sparkles },
 ];
 
@@ -71,15 +76,17 @@ export function SettingsPage({
 
   // Persist the active settings category between visits. Without this,
   // every time the user navigates away and comes back the panel resets
-  // to "Внешний вид", which is annoying when iterating on a deeper tab
-  // (e.g. tweaking firewall rules under Безопасность).
+  // to the first tab, which is annoying when iterating on a deeper one
+  // (e.g. tweaking firewall rules under Безопасность). Default lands on
+  // the first available category in the (logical) ALL_CATEGORIES order.
+  const defaultCategory: CategoryKey = categories[0]?.key ?? "connection";
   const [activeRaw, setActiveRaw] = useSetting<string>(
     "mint.settings.activeCategory",
-    "appearance"
+    defaultCategory
   );
   const isValid = (k: string): k is CategoryKey =>
     categories.some((c) => c.key === k);
-  const active: CategoryKey = isValid(activeRaw) ? activeRaw : "appearance";
+  const active: CategoryKey = isValid(activeRaw) ? activeRaw : defaultCategory;
   const setActive = (k: CategoryKey) => setActiveRaw(k);
 
   return (
