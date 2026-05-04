@@ -52,6 +52,19 @@ const NOISY_NETWORK_ERROR_PATTERNS: readonly RegExp[] = [
   // mid-flush. Common with modern browsers that aggressively cancel
   // pre-fetched requests.
   /\bEOF\b.*\b(write|read|copy)\b/i,
+  // IPv6 unreachable on dual-stack DNS / IPv4-only ISP. Windows
+  // returns `connectex: A socket operation was attempted to an
+  // unreachable network` for every IPv6 dial when the user's ISP
+  // hasn't given them an IPv6 prefix; sing-box retries on IPv4 and
+  // succeeds, so the connection ends up working — but each retry
+  // gets logged as ERROR, flooding the UI with rows like
+  // `dial tcp [2a01:bc80:8:100::9b85:fc06]:80: connectex: A socket
+  // operation was attempted to an unreachable network` repeated
+  // 5-10 times per page load. Not actionable from the user's side.
+  /socket operation was attempted to an unreachable network/i,
+  // POSIX equivalent of the same condition.
+  /network is unreachable/i,
+  /no route to host/i,
 ];
 
 export function parseEngineLine(raw: string): LogEntry {

@@ -161,31 +161,59 @@ export function buildSingboxConfig(opts: BuildOptions): string {
     // pattern Hiddify uses (hiddify-core/v2/config/dns.go), trimmed
     // down to the parts we actually need.
     dns: {
+      // Server order matters. `direct` is listed FIRST so that any DNS
+      // query that doesn't match an explicit rule — most importantly,
+      // the bootstrap resolution sing-box does for the proxy outbound's
+      // own server hostname BEFORE the tunnel is up — falls through to
+      // Cloudflare DoH at the literal IP 1.1.1.1 instead of the user's
+      // chosen `remote` (which on a hijacked Russian network resolves
+      // via the OS resolver and gets poisoned to 194.26.229.156).
+      //
+      // We also pin `final: "direct"` defensively in case sing-box's
+      // "first server is default" semantics change between versions.
+      // Confirmed in v1.10/1.11 that `final` overrides server order for
+      // unmatched queries.
       servers: [
-        {
-          tag: "remote",
-          address: remoteDns,
-          address_resolver: "direct",
-          detour: "proxy",
-        },
         {
           tag: "direct",
           address: localDns,
           address_resolver: "local",
           detour: "direct",
         },
+        {
+          tag: "remote",
+          address: remoteDns,
+          address_resolver: "direct",
+          detour: "proxy",
+        },
         { tag: "local", address: "local" },
       ],
       rules: [
-        // While the tunnel is being brought up, sing-box itself looks up
-        // the proxy server's hostname (e.g. premium-ru.geodema.network).
-        // Force that resolution through `direct` so it goes via the
-        // IP-addressed Cloudflare DoH instead of the (possibly hijacked)
-        // OS resolver.
+        // Inside the tunnel: any DNS query that originates from an
+        // outbound (i.e. apps using the VPN) goes through `direct` to
+        // bypass the user's potentially hijacked DoH choice. This rule
+        // alone is NOT sufficient for bootstrap resolution because
+        // bootstrap queries are not associated with an outbound yet —
+        // hence the server-order + `final` fallback above.
         { outbound: ["any"], server: "direct" },
       ],
+      // Default DNS server for any query not matched by `rules`. This is
+      // what catches the proxy outbound's server-hostname resolution at
+      // tunnel bring-up and is the actual fix for the RKN DNS-hijack
+      // that survived 0.3.5 (`dns.rules` doesn't fire at bootstrap, so
+      // queries fell back to the first `dns.servers` entry which used
+      // to be `remote`).
+      final: "direct",
       strategy: "prefer_ipv4",
       independent_cache: true,
+      // Suppress AAAA queries entirely if the user has explicitly opted
+      // out of IPv6 (Settings -> Сеть и DNS). On Windows-only IPv4
+      // ISPs the AAAA resolution still succeeds (DNS returns valid IPv6)
+      // but the dial to that IPv6 fails with `connectex: A socket
+      // operation was attempted to an unreachable network`, flooding
+      // the log. Default is still off (covered by the noisy-error
+      // filter at the UI layer) so existing IPv6 users don't lose
+      // anything.
     },
     inbounds: isAndroid()
       ? [
