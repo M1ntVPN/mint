@@ -142,6 +142,26 @@ export function buildSingboxConfig(opts: BuildOptions): string {
           },
         ]
       : [
+          // Desktop runs both a TUN inbound (wintun-backed on Windows;
+          // utun on macOS; /dev/net/tun on Linux) and a localhost mixed
+          // inbound. The TUN owns the OS routing table and captures every
+          // packet without requiring users to flip the system proxy. The
+          // mixed inbound on 127.0.0.1:7890 stays available for the
+          // optional "Использовать системный прокси" toggle (Settings ->
+          // Безопасность) which legacy Win32 apps that ignore routing
+          // rules occasionally need.
+          {
+            type: "tun",
+            tag: "tun-in",
+            auto_route: true,
+            strict_route: true,
+            inet4_address: "172.19.0.1/30",
+            inet6_address: "fdfe:dcba:9876::1/126",
+            stack: "mixed",
+            sniff: true,
+            sniff_override_destination: true,
+            mtu: 9000,
+          },
           {
             type: "mixed",
             tag: "mixed-in",
