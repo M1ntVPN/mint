@@ -35,10 +35,21 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
     },
   },
-  // Tauri uses Chromium on Windows and WebKit on macOS and Linux.
+  // Tauri's WebView differs per platform:
+  //   Windows  -> Chromium (WebView2)
+  //   Android  -> Chromium (Android System WebView)
+  //   macOS/iOS-> Safari/WebKit
+  //   Linux    -> WebKitGTK
+  // Targeting `safari13` for Android collapses Tailwind v4 (which emits
+  // `@layer`, CSS nesting, container queries) — those features need
+  // Chromium 105+. Map Chromium platforms to `chrome105` and only fall
+  // back to `safari13` for actual WebKit-based targets.
   build: {
-    target:
-      process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
+    target: (() => {
+      const p = process.env.TAURI_ENV_PLATFORM;
+      if (p === "windows" || p === "android") return "chrome105";
+      return "safari13";
+    })(),
     minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },
