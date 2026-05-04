@@ -693,7 +693,12 @@ function FolderHeader({
           className="flex-1 min-w-[88px] relative h-7 rounded-md bg-white/[0.06] ring-1 ring-inset ring-white/[0.04] overflow-hidden"
           title={`Использовано ${fmtBytes(used)}`}
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-violet-500/30 via-violet-500/15 to-transparent" />
+          {/* Symmetric centered glow — fades from transparent at both
+              edges to a soft violet accent in the middle. The previous
+              left-heavy `from-violet-500/30 ... to-transparent` gradient
+              read as "broken / partially-filled" instead of "active"
+              and was specifically called out by the user. */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
           <div className="absolute inset-0 flex items-center justify-center px-2.5 min-w-0">
             <span className="text-[11.5px] font-mono tabular-nums text-white/90 truncate">
               {fmtBytes(used)}

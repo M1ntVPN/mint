@@ -513,9 +513,16 @@ function NetworkSection() {
     "mint.dns.remote",
     "https://1.1.1.1/dns-query"
   );
+  // Default for the *local* DNS used to be `https://223.5.5.5/dns-query`
+  // (AliDNS, China Telecom). That's a horrible default for non-China
+  // users — the endpoint is China-firewalled outbound, so for everyone
+  // outside CN it just times out. Match the engine's new default
+  // (`configBuilder.ts`) and use Cloudflare 1.1.1.1 — it's also IP-
+  // addressed, so it bypasses the system resolver, which matters on
+  // RKN-poisoned Russian networks.
   const [local, setLocal] = useSetting<string>(
     "mint.dns.local",
-    "https://223.5.5.5/dns-query"
+    "https://1.1.1.1/dns-query"
   );
 
   const isCustomRemote = !DNS_PRESETS.some((p) => p.value === remote) && remote !== "";
@@ -551,7 +558,7 @@ function NetworkSection() {
       </RowWrap>
       <RowWrap
         label="DNS для локальной сети"
-        desc="Резолверы для приватных адресов и DNS-запросов в обход туннеля."
+        desc="Используется до подключения и для прямых запросов. Лучше IP-DoH (1.1.1.1) чтобы обойти подмену DNS у провайдера."
       >
         <div className="flex flex-col gap-1.5 items-end">
           <Dropdown
