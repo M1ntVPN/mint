@@ -12,6 +12,7 @@ import {
   X,
   Power,
   Edit2,
+  Copy,
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useServers, type SavedServer } from "../store/servers";
@@ -510,6 +511,17 @@ export function ProfilesPage({
                 setContextMenu(null);
               }}
             />
+            <ContextItem
+              icon={Copy}
+              label="Скопировать ссылку"
+              onClick={() => {
+                const s = servers.find((x) => x.id === contextMenu.id);
+                if (s?.address) {
+                  navigator.clipboard.writeText(s.address).catch(() => undefined);
+                }
+                setContextMenu(null);
+              }}
+            />
             <div className="h-px bg-white/[0.05] my-1" />
             <ContextItem
               icon={Trash2}
@@ -701,6 +713,17 @@ function SubscriptionFolder({
           className="opacity-0 group-hover:opacity-100 transition w-9 h-9 grid place-items-center rounded-md text-white/65 hover:text-white hover:bg-white/[0.07]"
         >
           <Edit2 size={16} />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            const uris = items.map((s) => s.address).filter(Boolean).join("\n");
+            if (uris) navigator.clipboard.writeText(uris).catch(() => undefined);
+          }}
+          title="Скопировать все ссылки"
+          className="opacity-0 group-hover:opacity-100 transition w-9 h-9 grid place-items-center rounded-md text-white/65 hover:text-white hover:bg-white/[0.07]"
+        >
+          <Copy size={16} />
         </button>
         <button
           onClick={(e) => {
