@@ -54,8 +54,8 @@ export function LogsPage() {
     <div className="p-6 h-full flex flex-col overflow-hidden">
       <PageHeader title="Логи" subtitle="Поток событий приложения и демона" />
 
-      <div className="flex items-center gap-2 mt-5 mb-3">
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+      <div className="flex flex-wrap items-center gap-2 mt-5 mb-3">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] overflow-x-auto scroll-thin">
           {LEVELS.map((l) => (
             <button
               key={l}
@@ -76,7 +76,7 @@ export function LogsPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex flex-wrap items-center gap-1.5 ml-auto">
           <div className="flex items-center gap-1.5">
             <Filter size={12} className="text-white/50" />
             <Dropdown
@@ -105,10 +105,10 @@ export function LogsPage() {
         </div>
       </div>
 
-      <div className="grad-border flex-1 p-3 overflow-hidden">
+      <div className="grad-border flex-1 p-3 overflow-hidden min-w-0">
         <div
           data-allow-select
-          className="h-full overflow-y-auto scroll-thin font-mono text-[13px] leading-6 cursor-text selectable-text"
+          className="h-full overflow-y-auto overflow-x-hidden scroll-thin font-mono text-[12.5px] leading-[1.45] cursor-text selectable-text min-w-0"
         >
           {filtered.length === 0 ? (
             <div className="h-full grid place-items-center text-white/35 text-[13px] text-center px-6">
@@ -117,26 +117,48 @@ export function LogsPage() {
                 : "Под выбранные фильтры нет записей"}
             </div>
           ) : (
+            // Two layouts:
+            //   * ≥sm (desktop, ~640px+): keep the four-column grid so
+            //     timestamps line up vertically and scanning is fast.
+            //   * <sm (mobile / phone portrait): collapse to a 2-row card
+            //     — metadata (time + level + source) on one line, the full
+            //     message wrapped underneath. The desktop grid was hard-
+            //     coded `120px_72px_72px_1fr`, leaving ~80–100px for the
+            //     message column on a 360px phone, which forced
+            //     `break-all` to chop words mid-syllable ("Wir…/tay/…/p")
+            //     — exactly what the user screenshotted as "логи кривые".
+            //
+            // We also swap `break-all` (breaks anywhere) for
+            // `break-words` + `overflow-wrap: anywhere` so URLs and long
+            // identifiers still wrap, but normal Cyrillic / English words
+            // don't get sliced mid-character.
             filtered.map((l, i) => (
               <motion.div
                 key={`${l.t}-${i}`}
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.18 }}
-                className="grid grid-cols-[120px_72px_72px_1fr] gap-3 px-2 py-1.5 rounded hover:bg-white/[0.03] items-center"
+                className="px-2 py-1.5 rounded hover:bg-white/[0.03] sm:grid sm:grid-cols-[120px_72px_72px_minmax(0,1fr)] sm:gap-3 sm:items-center"
               >
-                <span className="text-white/30 leading-none self-center">{l.t}</span>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:contents">
+                  <span className="text-white/30 leading-none">{l.t}</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center justify-center text-[10.5px] uppercase font-bold tracking-wider rounded-md border px-1.5 h-[18px] w-fit",
+                      colors[l.lvl] ?? colors.INFO
+                    )}
+                    style={{ lineHeight: "16px" }}
+                  >
+                    {l.lvl}
+                  </span>
+                  <span className="text-accent leading-none">[{l.src}]</span>
+                </div>
                 <span
-                  className={cn(
-                    "inline-flex items-center justify-center text-[10.5px] uppercase font-bold tracking-wider rounded-md border px-1.5 h-[18px] w-fit self-center",
-                    colors[l.lvl] ?? colors.INFO
-                  )}
-                  style={{ lineHeight: "16px" }}
+                  className="block text-white/85 leading-snug min-w-0 break-words mt-1 sm:mt-0"
+                  style={{ overflowWrap: "anywhere" }}
                 >
-                  {l.lvl}
+                  {l.msg}
                 </span>
-                <span className="text-accent leading-none self-center">[{l.src}]</span>
-                <span className="text-white/85 leading-snug self-center break-all">{l.msg}</span>
               </motion.div>
             ))
           )}

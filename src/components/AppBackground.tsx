@@ -1,7 +1,20 @@
 import { useTheme } from "../theme";
+import { isMobile } from "../utils/platform";
 import { WorldMap } from "./WorldMap";
 import bgWorldmap from "../assets/bg-worldmap.png";
 import bgNeon from "../assets/bg-neon.png";
+
+// Source PNGs are 1280×720 (neon) and 1488×704 (worldmap) — ~720p.
+// On a typical Android phone (e.g. 1080×2400 logical pixels at DPR ~2.75)
+// `object-cover` upscales these ~4× in each dimension which surfaces hard
+// blocky aliasing ("мыльная пиксельная" was the user's exact complaint on
+// 0.3.4-android). Until we ship higher-resolution sources, we apply a
+// Gaussian blur on mobile so the upscaling artefacts dissolve into a
+// soft ambient wash that matches the desktop intent. We also pin
+// `image-rendering` to `auto` to override any platform-default that
+// might fall back to nearest-neighbour upscaling on Android WebView.
+const MOBILE_BG_FILTER =
+  "blur(6px) saturate(1.08) brightness(1.02)" as const;
 
 export function AppBackground() {
   const { background } = useTheme();
@@ -11,6 +24,7 @@ export function AppBackground() {
   }
 
   if (background === "worldmap") {
+    const onMobile = isMobile();
     return (
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <img
@@ -19,6 +33,15 @@ export function AppBackground() {
           aria-hidden
           draggable={false}
           className="w-full h-full object-cover select-none opacity-[0.65]"
+          style={{
+            imageRendering: "auto",
+            filter: onMobile ? MOBILE_BG_FILTER : undefined,
+            // The blur sweeps the visible content inward by ~6px on each
+            // side, so we counter-scale the image slightly so the edges
+            // don't fade to background colour mid-screen on mobile.
+            transform: onMobile ? "scale(1.06)" : undefined,
+            transformOrigin: "center",
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-ink-950/25 via-transparent to-ink-950/55" />
         <div
@@ -33,6 +56,7 @@ export function AppBackground() {
   }
 
   if (background === "neon") {
+    const onMobile = isMobile();
     return (
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <img
@@ -41,6 +65,12 @@ export function AppBackground() {
           aria-hidden
           draggable={false}
           className="w-full h-full object-cover select-none opacity-[0.85]"
+          style={{
+            imageRendering: "auto",
+            filter: onMobile ? MOBILE_BG_FILTER : undefined,
+            transform: onMobile ? "scale(1.06)" : undefined,
+            transformOrigin: "center",
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-ink-950/15 via-transparent to-ink-950/55" />
       </div>
