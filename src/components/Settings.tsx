@@ -68,7 +68,19 @@ export function SettingsPage({
   const categories = mobile
     ? ALL_CATEGORIES.filter((c) => !c.desktopOnly)
     : ALL_CATEGORIES;
-  const [active, setActive] = useState<CategoryKey>("appearance");
+
+  // Persist the active settings category between visits. Without this,
+  // every time the user navigates away and comes back the panel resets
+  // to "Внешний вид", which is annoying when iterating on a deeper tab
+  // (e.g. tweaking firewall rules under Безопасность).
+  const [activeRaw, setActiveRaw] = useSetting<string>(
+    "mint.settings.activeCategory",
+    "appearance"
+  );
+  const isValid = (k: string): k is CategoryKey =>
+    categories.some((c) => c.key === k);
+  const active: CategoryKey = isValid(activeRaw) ? activeRaw : "appearance";
+  const setActive = (k: CategoryKey) => setActiveRaw(k);
 
   return (
     <div className="h-full flex p-6 gap-5 overflow-hidden">
@@ -266,14 +278,18 @@ function AppearanceSection() {
         </div>
       </div>
 
-      <div className="flex items-start justify-between gap-4 py-3">
-        <div className="pt-1 max-w-[170px]">
+      <div className="flex flex-wrap items-start justify-between gap-4 py-3">
+        <div className="pt-1 max-w-[170px] min-w-[120px]">
           <div className="text-[14px] text-white/90 font-medium">Фон приложения</div>
           <div className="text-[12.5px] text-white/40 mt-0.5">
             Что отрисовывать за всем интерфейсом
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 max-w-[380px] shrink-0">
+        {/* `flex flex-wrap` instead of a fixed `grid grid-cols-4`: the
+            background presets need to reflow into 3 / 2 / 1 columns when
+            the Settings pane is narrow. With the old fixed grid the last
+            preset was clipped on the right edge instead of wrapping. */}
+        <div className="flex flex-wrap gap-2 max-w-[380px] justify-end">
           {(
             [
               { key: "default", label: "Стандарт" },
