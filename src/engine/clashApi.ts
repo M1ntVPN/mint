@@ -63,7 +63,22 @@ export function subscribeTraffic(onSample: (s: TrafficSample) => void): () => vo
 
 export async function urlTest(
   outboundTag = "proxy",
-  testUrl = "https://www.gstatic.com/generate_204",
+  // Use plain HTTP (not HTTPS) so clash's `delay` measurement is
+  // dominated by network RTT instead of TLS-handshake time. The clash
+  // /proxies/:name/delay endpoint times the *full* request round-trip
+  // through the proxy outbound: TCP connect + (TLS handshake) + HTTP
+  // request + response. Over HTTPS that's ~3-4 × raw RTT (TCP 1-RTT +
+  // TLS 1.3 ≥1-RTT + HTTP 1-RTT), so a tunnel with a real 100ms ping
+  // would render as ~300-400ms in the dashboard "Пинг" card and read
+  // as if the VPN were 4× slower than speedtest reported. HTTP brings
+  // the sample down to ~2 × RTT (TCP + HTTP) which is much closer to
+  // what users see in third-party speedtests / pings.
+  //
+  // cp.cloudflare.com/generate_204 is Cloudflare's published captive-
+  // portal probe — it returns HTTP 204 with no body and no redirect,
+  // and Cloudflare's edge is geographically wide so the test isn't
+  // bottlenecked on a single distant origin.
+  testUrl = "http://cp.cloudflare.com/generate_204",
   timeoutMs = 5000
 ): Promise<number | null> {
   const base = BASE();

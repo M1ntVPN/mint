@@ -119,15 +119,27 @@ function App() {
         setDown(sample.down);
         setUp(sample.up);
       });
+      // Sliding window of the last few clash url-test samples.
+      // Each clash `delay` call opens a fresh outbound (TCP handshake,
+      // possibly TLS), so individual samples spike well above the
+      // steady-state RTT — especially the very first one after
+      // connecting. We display the *minimum* of the recent samples so
+      // the "Пинг" card converges quickly to the best-case round-trip
+      // the tunnel actually achieves, instead of bouncing between
+      // ~2× and ~4× RTT depending on which probe we just finished.
+      const recent: number[] = [];
+      const RECENT_MAX = 5;
       const probe = async () => {
         const ms = await urlTest("proxy");
         if (ms != null && ms > 0) {
+          recent.push(ms);
+          if (recent.length > RECENT_MAX) recent.shift();
           // Show tunnel RTT in the dashboard StatsCards card.
           // Don't write it back to the server's row ping — that row
           // shows the *direct* (pre-VPN) latency, and overwriting it
           // with the via-tunnel RTT made the list lie about which
           // server is actually closest to the user.
-          setPing(ms);
+          setPing(Math.min(...recent));
         }
       };
       probe();
