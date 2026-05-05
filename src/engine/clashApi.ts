@@ -15,37 +15,45 @@ export function subscribeTraffic(onSample: (s: TrafficSample) => void): () => vo
   let cancelled = false;
   let controller: AbortController | null = null;
 
-  const start = async () => {
+  const attempt = async () => {
     const base = BASE();
     if (!base) return;
     controller = new AbortController();
-    try {
-      const resp = await fetch(`${base}/traffic`, { signal: controller.signal });
-      if (!resp.body) return;
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buf = "";
-      while (!cancelled) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) >= 0) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          try {
-            const obj = JSON.parse(line) as TrafficSample;
-            onSample({ up: obj.up || 0, down: obj.down || 0 });
-          } catch {
-          }
+    const resp = await fetch(`${base}/traffic`, { signal: controller.signal });
+    if (!resp.body) return;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buf = "";
+    while (!cancelled) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        try {
+          const obj = JSON.parse(line) as TrafficSample;
+          onSample({ up: obj.up || 0, down: obj.down || 0 });
+        } catch {
         }
       }
-    } catch {
     }
   };
 
-  start();
+  const loop = async () => {
+    while (!cancelled) {
+      try {
+        await attempt();
+      } catch {
+        // fetch failed or stream broke — retry after a short delay
+      }
+      if (!cancelled) await new Promise((r) => setTimeout(r, 1000));
+    }
+  };
+
+  loop();
 
   return () => {
     cancelled = true;

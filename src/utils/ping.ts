@@ -1,25 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { parseShareUri } from "./uri";
 import type { SavedServer } from "../store/servers";
-import { useConnection } from "../store/connection";
 
 export interface ProbeOpts {
   attempts?: number;
   timeoutMs?: number;
 }
 
-export class VpnActivePingError extends Error {
-  readonly code = "VPN_ACTIVE" as const;
-  constructor() {
-    super("ping unavailable while VPN is active");
-    this.name = "VpnActivePingError";
-  }
-}
-
 export async function probeServer(s: SavedServer, opts: ProbeOpts = {}): Promise<number> {
-  if (useConnection.getState().state === "connected") {
-    throw new VpnActivePingError();
-  }
   const inTauri = !!(window as unknown as { __TAURI_INTERNALS__?: unknown })
     .__TAURI_INTERNALS__;
   if (!inTauri) {
