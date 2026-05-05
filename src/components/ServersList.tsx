@@ -641,55 +641,23 @@ function FolderHeader({
         </div>
       )}
 
-      {subscription && pct !== null ? (
-        // Real progress bar: known used + total → colored fill scaled
-        // to `pct` with the numbers centered on top.
+      {subscription ? (
         <div
           className="flex-1 min-w-[88px] relative h-7 rounded-md bg-white/[0.06] ring-1 ring-inset ring-white/[0.04] overflow-hidden"
-          title={`${fmtBytes(used)} / ${fmtBytes(total)} (${pct.toFixed(1)}%)`}
+          title={
+            pct !== null
+              ? `${fmtBytes(used)} / ${fmtBytes(total)} (${pct.toFixed(1)}%)`
+              : `Использовано ${fmtBytes(used)}`
+          }
         >
-          <div
-            className={cn(
-              "absolute inset-y-0 left-0 transition-all",
-              pct < 60
-                ? "bg-emerald-400/75"
-                : pct < 80
-                  ? "bg-lime-400/75"
-                  : pct < 95
-                    ? "bg-amber-400/75"
-                    : "bg-rose-400/75"
-            )}
-            style={{ width: `${pct}%` }}
-          />
-          {/* `min-w-0` on the flex parent + `truncate` on the span lets
-              the centered numeric text shrink with ellipsis instead of
-              being clipped mid-character (which is what users were
-              seeing on narrow Settings panes / portrait windows). */}
-          <div className="absolute inset-0 flex items-center justify-center px-2.5 min-w-0">
-            <span className="text-[11.5px] font-mono tabular-nums text-white truncate drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]">
-              {fmtBytes(used)} / {fmtBytes(total)} · {pct.toFixed(0)}%
-            </span>
-          </div>
-        </div>
-      ) : subscription ? (
-        // Subscribed but quota total is unknown: render the same
-        // strip but with a soft accent gradient at full width (so it
-        // reads as "active" rather than "empty bar with a number")
-        // and just the used amount centered. Without the gradient
-        // the bar looked broken on wide windows (huge dark slot with
-        // a tiny number floating in the middle), and the previous
-        // "X GB использовано" text was being clipped
-        // mid-character on narrow ones.
-        <div
-          className="flex-1 min-w-[88px] relative h-7 rounded-md bg-white/[0.06] ring-1 ring-inset ring-white/[0.04] overflow-hidden"
-          title={`Использовано ${fmtBytes(used)}`}
-        >
-          {/* Symmetric centered glow — fades from transparent at both
-              edges to a soft violet accent in the middle. The previous
-              left-heavy `from-violet-500/30 ... to-transparent` gradient
-              read as "broken / partially-filled" instead of "active"
-              and was specifically called out by the user. */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
+          {pct !== null ? (
+            <div
+              className="absolute inset-y-0 left-0 transition-all bg-violet-500/20"
+              style={{ width: `${pct}%` }}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
+          )}
           <div className="absolute inset-0 flex items-center justify-center px-2.5 min-w-0">
             <span className="text-[11.5px] font-mono tabular-nums text-white/90 truncate">
               {fmtBytes(used)}
