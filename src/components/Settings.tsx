@@ -362,8 +362,11 @@ function BehaviorSection() {
   useEffect(() => {
     (async () => {
       try {
-        const plugin = await import("@tauri-apps/plugin-autostart");
-        const current = await plugin.isEnabled();
+        // Source of truth is the OS (Windows Run key, .desktop file,
+        // LaunchAgent), not the localStorage flag — keep them in sync
+        // in case something changed between sessions (e.g. user
+        // disabled it in Task Manager → Startup).
+        const current = (await invoke("mint_is_autostart_enabled")) as boolean;
         if (current !== autostart) {
           setAutostart(current);
         }
@@ -375,9 +378,7 @@ function BehaviorSection() {
   const toggleAutostart = async (v: boolean) => {
     setBusy(true);
     try {
-      const plugin = await import("@tauri-apps/plugin-autostart");
-      if (v) await plugin.enable();
-      else await plugin.disable();
+      await invoke("mint_set_autostart", { enabled: v });
       setAutostart(v);
     } catch (e) {
       console.warn("autostart toggle failed", e);

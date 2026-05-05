@@ -23,6 +23,57 @@ fn set_close_to_tray(enabled: bool) {
     CLOSE_TO_TRAY.store(enabled, Ordering::SeqCst);
 }
 
+#[cfg(desktop)]
+#[tauri::command]
+async fn mint_set_autostart(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let _ = app;
+        if enabled {
+            autostart::enable().map_err(|e| e.0)?;
+        } else {
+            autostart::disable().map_err(|e| e.0)?;
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let mgr = app.autolaunch();
+        let res = if enabled { mgr.enable() } else { mgr.disable() };
+        res.map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+async fn mint_is_autostart_enabled(app: AppHandle) -> Result<bool, String> {
+    #[cfg(windows)]
+    {
+        let _ = app;
+        Ok(autostart::is_enabled())
+    }
+    #[cfg(not(windows))]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        app.autolaunch().is_enabled().map_err(|e| e.to_string())
+    }
+}
+
+/// Returns true when the binary was launched by the OS' login-items
+/// machinery (Windows Run key, .desktop autostart, LaunchAgent). The
+/// frontend uses this to skip popping the main window in the user's
+/// face on every boot — instead we sit silently in the tray and let
+/// auto-connect bring the tunnel up in the background.
+#[cfg(desktop)]
+#[tauri::command]
+fn mint_launched_via_autostart() -> bool {
+    std::env::args().any(|a| a == autostart::AUTOSTART_ARG)
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     #[cfg(desktop)]
@@ -48,6 +99,8 @@ fn perform_graceful_shutdown(app: &AppHandle) {
     killswitch::disable_blocking();
 }
 
+#[cfg(desktop)]
+mod autostart;
 mod commands;
 #[cfg(desktop)]
 mod killswitch;
@@ -168,7 +221,12 @@ fn run_desktop() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec![]),
+            // Pass the marker arg so the binary can tell apart user
+            // launches from login-item launches and start hidden in
+            // the tray on the latter (Linux / macOS path — Windows
+            // bypasses this plugin and writes the Run key directly,
+            // see `autostart.rs`).
+            Some(vec![autostart::AUTOSTART_ARG]),
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
@@ -178,6 +236,30 @@ fn run_desktop() {
             // so the user gets their internet back even if the React app
             // never reaches the JS-side cleanup.
             sysproxy::restore_orphan_snapshot_at_startup(&app.handle());
+
+            // Re-write the autostart entry on every launch so that, if
+            // the binary moved (NSIS reinstall to a different path,
+            // updater swap, manual move), the Run key always points to
+            // the *currently running* exe. On Windows this also re-
+            // applies our quoted command-line, fixing entries that
+            // older versions wrote unquoted via tauri-plugin-autostart.
+            #[cfg(windows)]
+            autostart::refresh_if_enabled();
+
+            // The main window is created with `visible: false` so it
+            // never flashes during init. When the OS' login-items
+            // machinery launches us (Windows Run key, .desktop, Launch
+            // Agent), keep it hidden — the user expects the tunnel to
+            // come back silently in the tray. On a normal user launch
+            // we show it now.
+            let launched_via_autostart =
+                std::env::args().any(|a| a == autostart::AUTOSTART_ARG);
+            if !launched_via_autostart {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
 
             #[cfg(any(windows, target_os = "linux"))]
             {
@@ -291,6 +373,9 @@ fn run_desktop() {
             set_close_to_tray,
             quit_app,
             prepare_for_update,
+            mint_set_autostart,
+            mint_is_autostart_enabled,
+            mint_launched_via_autostart,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mint");

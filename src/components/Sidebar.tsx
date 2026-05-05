@@ -74,7 +74,11 @@ export function Sidebar({
 
   return (
     <aside className={cn(
-      "shrink-0 h-full flex flex-col pt-4 pb-4 border-r border-white/[0.05] bg-ink-900/60 backdrop-blur-xl transition-[width,padding] duration-200",
+      // overflow-hidden clips any content that's still at its
+      // expanded intrinsic size during the width transition — without
+      // this, labels, the brand card and the active-page pill spill
+      // past the right edge mid-animation and look broken.
+      "shrink-0 h-full flex flex-col pt-4 pb-4 border-r border-white/[0.05] bg-ink-900/60 backdrop-blur-xl overflow-hidden transition-[width,padding] duration-200",
       collapsed ? "w-[52px] px-1.5" : "w-[230px] px-3"
     )}>
       {collapsed ? (
@@ -92,14 +96,9 @@ export function Sidebar({
           </div>
         </div>
       ) : (
-        <motion.div
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="relative p-3.5 mb-4 overflow-hidden antialiased rounded-2xl bg-gradient-to-b from-white/[0.05] to-white/[0.02] border border-white/[0.08]"
-        >
+        <div className="relative p-3.5 mb-4 overflow-hidden antialiased rounded-2xl bg-gradient-to-b from-white/[0.05] to-white/[0.02] border border-white/[0.08]">
           <div className={cn("pointer-events-none absolute -top-12 -right-10 w-32 h-32 rounded-full bg-gradient-to-br to-transparent blur-2xl transition-colors duration-700", haloColor)} />
-          <div className="relative flex items-center gap-2.5">
+          <div className="relative flex items-center gap-2.5 min-w-0">
             <div className="relative w-12 h-12 shrink-0">
               <img
                 src={brandSrc}
@@ -111,14 +110,14 @@ export function Sidebar({
                 style={{ imageRendering: "auto" }}
               />
             </div>
-            <div className="flex-1 flex flex-col items-center leading-tight min-w-0">
+            <div className="flex-1 min-w-0 flex flex-col items-center leading-tight">
               <span className="text-[18px] font-bold tracking-tight text-white">Mint</span>
-              <span className="text-[11.5px] tracking-tight text-white/55 mt-0.5 whitespace-nowrap">
+              <span className="text-[11.5px] tracking-tight text-white/55 mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
                 VPN client{version ? ` · ${version}` : ""}
               </span>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       <nav className="flex flex-col gap-1.5">
@@ -140,7 +139,14 @@ export function Sidebar({
             >
               {active && (
                 <motion.div
-                  layoutId="navActive"
+                  // The layoutId is keyed on `collapsed` so framer-motion
+                  // treats the expanded and collapsed pills as two
+                  // separate elements. Without this, toggling the
+                  // sidebar would spring-animate the pill across the
+                  // width change and leave it stuck mid-shrink for a
+                  // beat — visible in the screenshot the user
+                  // attached.
+                  layoutId={collapsed ? "navActive-c" : "navActive-e"}
                   transition={{ type: "spring", stiffness: 360, damping: 32 }}
                   className="absolute inset-0 rounded-xl bg-accent-soft border-accent-soft border"
                   style={{
@@ -151,7 +157,11 @@ export function Sidebar({
                 />
               )}
               <Icon size={17} />
-              {!collapsed && <span className="relative">{item.label}</span>}
+              {!collapsed && (
+                <span className="relative whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
+                  {item.label}
+                </span>
+              )}
               {active && !collapsed && (
                 <span
                   className="absolute right-3 w-1.5 h-1.5 rounded-full"
@@ -263,7 +273,11 @@ export function Sidebar({
         )}
       >
         {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-        {!collapsed && <span className="text-[13px]">Свернуть</span>}
+        {!collapsed && (
+          <span className="text-[13px] whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
+            Свернуть
+          </span>
+        )}
       </button>
     </aside>
   );
