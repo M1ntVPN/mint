@@ -83,7 +83,8 @@ export function ProfilesPage({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("added-desc");
   const [protoFilter, setProtoFilter] = useState<string>("all");
-  const [collapsedSubs, setCollapsedSubs] = useState<Set<string>>(new Set());
+  const collapsedProfileIds = useFolders((st) => st.collapsedProfileIds);
+  const toggleProfileCollapsed = useFolders((st) => st.toggleProfileCollapsed);
   const [refreshingSub, setRefreshingSub] = useState<string | null>(null);
   const [pingingAll, setPingingAll] = useState(false);
   const [pingingId, setPingingId] = useState<string | null>(null);
@@ -232,8 +233,32 @@ export function ProfilesPage({
       }
       const userInfo = parseUserInfo(resp.user_info);
       const title = decodeProfileTitle(resp.title);
+      const oldServers = useServers.getState().servers.filter(
+        (s) => s.subscriptionId === sub.id
+      );
+      const customMeta = new Map<
+        string,
+        { name: string; description?: string; favorite?: boolean; pinned?: boolean }
+      >();
+      for (const s of oldServers) customMeta.set(s.address, {
+        name: s.name,
+        description: s.description,
+        favorite: s.favorite,
+        pinned: s.pinned,
+      });
       removeBySub(sub.id);
-      const newIds = addManyServers(urisToServers(uris, sub.id));
+      const freshServers = urisToServers(uris, sub.id).map((s) => {
+        const prev = customMeta.get(s.address);
+        if (!prev) return s;
+        return {
+          ...s,
+          name: prev.name,
+          description: prev.description,
+          favorite: prev.favorite,
+          pinned: prev.pinned,
+        };
+      });
+      const newIds = addManyServers(freshServers);
       const friendly = title || sub.name;
       const existing = useFolders.getState().findBySubscription(sub.id);
       const folderId = existing
@@ -267,13 +292,7 @@ export function ProfilesPage({
     removeSub(sub.id);
   };
 
-  const toggleCollapsed = (id: string) =>
-    setCollapsedSubs((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
+  const toggleCollapsed = (id: string) => toggleProfileCollapsed(id);
 
   const subBuckets = useMemo(() => {
     const m = new Map<string, SavedServer[]>();
@@ -350,13 +369,16 @@ export function ProfilesPage({
       <div className="mt-4 space-y-3">
         {subs.map((sub) => {
           const items = subBuckets.bySub.get(sub.id) ?? [];
-          const collapsed = collapsedSubs.has(sub.id);
+          const collapsed = collapsedProfileIds.includes(sub.id);
           return (
             <SubscriptionFolder
               key={sub.id}
               sub={sub}
               items={items}
               collapsed={collapsed}
+              folderName={
+                folders.find((f) => f.subscriptionId === sub.id)?.name
+              }
               folderDescription={
                 folders.find((f) => f.subscriptionId === sub.id)?.description
               }
@@ -602,6 +624,7 @@ function SubscriptionFolder({
   items,
   collapsed,
   refreshing,
+  folderName,
   folderDescription,
   onToggle,
   onRefresh,
@@ -613,6 +636,7 @@ function SubscriptionFolder({
   items: SavedServer[];
   collapsed: boolean;
   refreshing: boolean;
+  folderName?: string;
   folderDescription?: string;
   onToggle: () => void;
   onRefresh: () => void;
@@ -642,7 +666,7 @@ function SubscriptionFolder({
         </div>
         <div className="flex flex-col leading-tight min-w-0 flex-1">
           <span className="text-[13.5px] font-semibold text-white truncate">
-            {sub.name}
+            {folderName || sub.name}
           </span>
           {folderDescription && (
             <span
