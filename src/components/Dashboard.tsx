@@ -38,6 +38,9 @@ function toListServer(s: SavedServer): Server {
 export function Dashboard(props: Props) {
   const savedServers = useServers((st) => st.servers);
   const listServers = savedServers.map(toListServer);
+  const selectedServer = props.selectedId
+    ? savedServers.find((s) => s.id === props.selectedId)
+    : undefined;
   return (
     <div className="relative h-full overflow-hidden flex flex-col">
       <div
@@ -56,7 +59,13 @@ export function Dashboard(props: Props) {
             transition={{ duration: 0.35, ease: "easeOut" }}
             className="relative"
           >
-            <ConnectButton state={props.state} onClick={props.toggle} />
+            <ConnectButton
+              state={props.state}
+              onClick={props.toggle}
+              serverName={selectedServer?.name}
+              serverCountry={selectedServer?.country}
+              serverFlag={selectedServer?.flag}
+            />
           </motion.div>
           <AnimatePresence>
             {props.connectError && (

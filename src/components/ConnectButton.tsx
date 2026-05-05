@@ -2,11 +2,15 @@ import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion"
 import { Loader2, Power, Zap } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { cn } from "../utils/cn";
+import { Flag } from "./Flag";
 import type { ConnState } from "../types";
 
 interface Props {
   state: ConnState;
   onClick: () => void;
+  serverName?: string;
+  serverCountry?: string;
+  serverFlag?: string;
 }
 
 const OUTER_BASE_DPS = 360 / 28;
@@ -18,7 +22,7 @@ const INTRO_OUTER_DPS = OUTER_BASE_DPS * 2.8;
 const INTRO_INNER_DPS = INNER_BASE_DPS * 2.8;
 const INTRO_SETTLE_MS = 1800;
 
-export function ConnectButton({ state, onClick }: Props) {
+export function ConnectButton({ state, onClick, serverName, serverCountry, serverFlag }: Props) {
   const isOn = state === "connected";
   const isConnecting = state === "connecting";
   const isDisconnecting = state === "disconnecting";
@@ -30,9 +34,9 @@ export function ConnectButton({ state, onClick }: Props) {
     "Не подключено";
 
   const sub =
-    state === "connected" ? "Защищённое соединение активно" :
     state === "connecting" ? "Устанавливаем туннель" :
     state === "disconnecting" ? "Закрываем сессию" :
+    state === "connected" ? null :
     "Нажмите чтобы подключиться";
 
   const outerAngle = useMotionValue(0);
@@ -240,15 +244,28 @@ export function ConnectButton({ state, onClick }: Props) {
         >
           {label}
         </motion.div>
-        <motion.div
-          key={sub}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          className="text-[13px] text-white/45 mt-0.5"
-        >
-          {sub}
-        </motion.div>
+        {isOn && serverName ? (
+          <motion.div
+            key="server-info"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-center justify-center gap-2 mt-1"
+          >
+            <Flag flag={serverFlag} country={serverCountry} size={18} />
+            <span className="text-[13px] text-white/55">{serverName}</span>
+          </motion.div>
+        ) : sub ? (
+          <motion.div
+            key={sub}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-[13px] text-white/45 mt-0.5"
+          >
+            {sub}
+          </motion.div>
+        ) : null}
       </div>
     </div>
   );
