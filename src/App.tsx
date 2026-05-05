@@ -874,14 +874,14 @@ function App() {
       }
       return;
     }
+    type DownloadEvt = {
+      event: "Started" | "Progress" | "Finished";
+      data?: { contentLength?: number; chunkLength?: number };
+    };
+    type DownloadOpts = { timeout?: number; headers?: Record<string, string> };
     type UpdateHandle = {
-      downloadAndInstall: (
-        cb?: (event: {
-          event: "Started" | "Progress" | "Finished";
-          data?: { contentLength?: number; chunkLength?: number };
-        }) => void,
-        options?: { timeout?: number; headers?: Record<string, string> },
-      ) => Promise<void>;
+      download: (cb?: (event: DownloadEvt) => void, options?: DownloadOpts) => Promise<void>;
+      install: () => Promise<void>;
     };
     try {
       let inst = updateRef.current as UpdateHandle | null;
@@ -897,28 +897,9 @@ function App() {
         setUpdateError("Не удалось получить информацию об обновлении.");
         return;
       }
-      if (state === "connected" || state === "connecting") {
-        try {
-          await doDisconnect({ silent: true });
-        } catch (e) {
-          log({
-            t: ts(),
-            lvl: "WARN",
-            src: "updater",
-            msg: `pre-update disconnect failed: ${(e as Error)?.message ?? e}`,
-          });
-        }
-      }
-      try {
-        await invoke("prepare_for_update");
-      } catch (e) {
-        log({
-          t: ts(),
-          lvl: "WARN",
-          src: "updater",
-          msg: `prepare_for_update failed: ${(e as Error)?.message ?? e}`,
-        });
-      }
+
+      // Progress plumbing — shared across download attempts so the UI
+      // doesn't visibly snap back to 0 between retries.
       setUpdateBusy("downloading");
       let downloaded = 0;
       let total = 0;
@@ -944,8 +925,7 @@ function App() {
           setTimeout(flush, 50 - elapsed);
         }
       };
-      await inst.downloadAndInstall(
-        (event) => {
+      const onProgress = (event: DownloadEvt) => {
         if (event.event === "Started") {
           const cl = event.data?.contentLength ?? 0;
           if (cl > total) total = cl;
@@ -958,15 +938,112 @@ function App() {
           if (c > 0) downloaded += c;
           schedule();
         } else if (event.event === "Finished") {
-          setUpdateBusy("installing");
           const final = total || downloaded;
           setUpdateProgress({ done: final, total: final, percent: 100 });
         }
-        },
-        // 5 minutes — Windows installer download is ~80MB and on slow links
-        // the default 30s would surface as a transient send-stage failure.
-        { timeout: 300_000 },
-      );
+      };
+
+      const isTransientNetErr = (msg: string) =>
+        /error sending request|timed out|timeout|connection (closed|reset|aborted)|os error 10054|os error 10060|dns error|temporary failure|tcp connect error|broken pipe/i.test(
+          msg,
+        );
+
+      // 1) If a VPN tunnel is up, attempt the download *through the
+      //    tunnel* first. Users on RKN-filtered networks rely on the
+      //    tunnel to even reach GitHub's release-asset CDN; tearing it
+      //    down before the bytes are local guarantees a failed update.
+      // 2) If that fails (or we were never connected), tear the tunnel
+      //    down and retry on a direct connection — some VPN exits
+      //    rate-limit GitHub or block the redirect target.
+      // 3) Only after the bytes are local do we run the installer.
+      const downloadLastErrRef: { current: unknown } = { current: null };
+
+      // Download with retries on transient send-stage errors. We bias
+      // toward retrying because GitHub's release-asset CDN
+      // (release-assets.githubusercontent.com / objects.githubusercontent.com)
+      // periodically blackholes connections from RKN-filtered networks,
+      // and on those a single TLS hiccup gets surfaced to the user as
+      // "Установка обновления не удалась: error sending request".
+      const tryDownload = async (label: string): Promise<boolean> => {
+        let lastErr: unknown;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            // 5 minutes — Windows installer download is ~14-80MB and on slow
+            // links the default 30s would surface as a transient send-stage
+            // failure.
+            await inst!.download(onProgress, { timeout: 300_000 });
+            return true;
+          } catch (err) {
+            lastErr = err;
+            const msg = typeof err === "string" ? err : (err as Error)?.message ?? "";
+            const transient = isTransientNetErr(msg);
+            log({
+              t: ts(),
+              lvl: "WARN",
+              src: "updater",
+              msg: `download (${label}) attempt ${attempt + 1} failed: ${msg}${
+                attempt < 2 && transient ? " — retrying" : ""
+              }`,
+            });
+            if (!transient || attempt === 2) break;
+            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          }
+        }
+        if (lastErr) downloadLastErrRef.current = lastErr;
+        return false;
+      };
+
+      let downloadOk = false;
+      const wasConnected = state === "connected" || state === "connecting";
+      if (wasConnected) {
+        downloadOk = await tryDownload("via-tunnel");
+      }
+      if (!downloadOk) {
+        if (useConnection.getState().state !== "disconnected") {
+          try {
+            await doDisconnect({ silent: true });
+          } catch (e) {
+            log({
+              t: ts(),
+              lvl: "WARN",
+              src: "updater",
+              msg: `pre-update disconnect failed: ${(e as Error)?.message ?? e}`,
+            });
+          }
+        }
+        downloadOk = await tryDownload("direct");
+      }
+      if (!downloadOk) {
+        throw downloadLastErrRef.current ??
+          new Error("download failed after retries");
+      }
+
+      // Bytes are on disk — safe to disconnect VPN (so the installer can
+      // replace files / restart cleanly) and run the installer.
+      if (useConnection.getState().state !== "disconnected") {
+        try {
+          await doDisconnect({ silent: true });
+        } catch (e) {
+          log({
+            t: ts(),
+            lvl: "WARN",
+            src: "updater",
+            msg: `pre-install disconnect failed: ${(e as Error)?.message ?? e}`,
+          });
+        }
+      }
+      try {
+        await invoke("prepare_for_update");
+      } catch (e) {
+        log({
+          t: ts(),
+          lvl: "WARN",
+          src: "updater",
+          msg: `prepare_for_update failed: ${(e as Error)?.message ?? e}`,
+        });
+      }
+      setUpdateBusy("installing");
+      await inst.install();
       try {
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
