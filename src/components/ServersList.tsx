@@ -290,67 +290,41 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
       />
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin pr-1 space-y-1.5">
-      <Reorder.Group
-        axis="y"
-        values={orderedFolders}
-        onReorder={(next) => reorderFolders(next.map((f) => f.id))}
-        className="space-y-1.5"
-      >
-        {groupedFolders.map(({ folder, items }) => {
-          const isOpen = open[folder.id] ?? true;
-          const filtered = items.filter(matches);
-          const sub = folder.subscriptionId
-            ? subById.get(folder.subscriptionId)
-            : undefined;
-          return (
-            <FolderReorderItem
-              key={folder.id}
-              folder={folder}
-              count={items.length}
-              isOpen={isOpen}
-              onToggle={() =>
-                setOpen((o) => ({ ...o, [folder.id]: !(o[folder.id] ?? true) }))
-              }
-              subscription={sub}
-              onPingAll={() => pingFolder(folder)}
-              pingingAll={pingingFolder.has(folder.id)}
-            >
-              <AnimatePresence initial={false}>
+      {query || protoFilter !== "all" ? (
+        <div className="space-y-1.5">
+          {groupedFolders.map(({ folder, items }) => {
+            const isOpen = open[folder.id] ?? true;
+            const filtered = items.filter(matches);
+            const sub = folder.subscriptionId
+              ? subById.get(folder.subscriptionId)
+              : undefined;
+            return (
+              <div key={folder.id}>
+                <FolderHeader
+                  folder={folder}
+                  count={items.length}
+                  isOpen={isOpen}
+                  onToggle={() =>
+                    setOpen((o) => ({ ...o, [folder.id]: !(o[folder.id] ?? true) }))
+                  }
+                  subscription={sub}
+                  onPingAll={() => pingFolder(folder)}
+                  pingingAll={pingingFolder.has(folder.id)}
+                />
                 {isOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{
-                      height: { duration: 0.36, ease: [0.32, 0.72, 0, 1] },
-                      opacity: { duration: 0.24, ease: [0.4, 0, 0.2, 1] },
-                    }}
-                    className="overflow-hidden"
+                  <div
+                    className={cn(
+                      "pt-1 ml-[18px] pl-3 border-l-2",
+                      folder.pinned
+                        ? "border-amber-400/25"
+                        : "border-violet-400/20"
+                    )}
                   >
-                    <div
-                      className={cn(
-                        "pt-1 ml-[18px] pl-3 border-l-2",
-                        folder.pinned
-                          ? "border-amber-400/25"
-                          : "border-violet-400/20"
-                      )}
-                    >
                     {filtered.length === 0 ? (
                       <div className="text-[12px] text-white/35 px-2 py-1.5 pt-1">
                         Пусто — переместите сюда сервер из общего списка.
                       </div>
-                    ) : query || protoFilter !== "all" ? (
-                      // While the user is filtering, render a plain list
-                      // instead of a Reorder.Group. Reorder.Item runs a
-                      // layout animation whenever its parent's `values`
-                      // array changes, which is great for drag-to-reorder
-                      // but means every keystroke in the search box (or
-                      // every protocol filter switch) reshuffles the
-                      // remaining rows with a 200ms spring transition —
-                      // visually that reads as cards "stretching" /
-                      // sliding around the page on every typed character.
-                      // DnD makes no sense on a partial list anyway, so
-                      // we drop into a plain div for the filtered view.
+                    ) : (
                       <div className="space-y-1">
                         {filtered.map((s) => (
                           <ServerRow
@@ -361,36 +335,88 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                           />
                         ))}
                       </div>
-                    ) : (
-                      <Reorder.Group
-                        axis="y"
-                        values={filtered}
-                        onReorder={(next) =>
-                          reorderFolderServers(
-                            folder.id,
-                            next.map((s) => s.id)
-                          )
-                        }
-                        className="space-y-1"
-                      >
-                        {filtered.map((s) => (
-                          <ServerReorderItem
-                            key={s.id}
-                            server={s}
-                            selected={selectedId === s.id}
-                            onSelect={() => onSelect(s.id)}
-                          />
-                        ))}
-                      </Reorder.Group>
                     )}
-                    </div>
-                  </motion.div>
+                  </div>
                 )}
-              </AnimatePresence>
-            </FolderReorderItem>
-          );
-        })}
-      </Reorder.Group>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <Reorder.Group
+          axis="y"
+          values={orderedFolders}
+          onReorder={(next) => reorderFolders(next.map((f) => f.id))}
+          className="space-y-1.5"
+        >
+          {groupedFolders.map(({ folder, items }) => {
+            const isOpen = open[folder.id] ?? true;
+            const filtered = items.filter(matches);
+            const sub = folder.subscriptionId
+              ? subById.get(folder.subscriptionId)
+              : undefined;
+            return (
+              <FolderReorderItem
+                key={folder.id}
+                folder={folder}
+                count={items.length}
+                isOpen={isOpen}
+                onToggle={() =>
+                  setOpen((o) => ({ ...o, [folder.id]: !(o[folder.id] ?? true) }))
+                }
+                subscription={sub}
+                onPingAll={() => pingFolder(folder)}
+                pingingAll={pingingFolder.has(folder.id)}
+              >
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{
+                        height: { duration: 0.36, ease: [0.32, 0.72, 0, 1] },
+                        opacity: { duration: 0.24, ease: [0.4, 0, 0.2, 1] },
+                      }}
+                      className="overflow-hidden"
+                    >
+                      <div
+                        className={cn(
+                          "pt-1 ml-[18px] pl-3 border-l-2",
+                          folder.pinned
+                            ? "border-amber-400/25"
+                            : "border-violet-400/20"
+                        )}
+                      >
+                        <Reorder.Group
+                          axis="y"
+                          values={filtered}
+                          onReorder={(next) =>
+                            reorderFolderServers(
+                              folder.id,
+                              next.map((s) => s.id)
+                            )
+                          }
+                          className="space-y-1"
+                        >
+                          {filtered.map((s) => (
+                            <ServerReorderItem
+                              key={s.id}
+                              server={s}
+                              selected={selectedId === s.id}
+                              onSelect={() => onSelect(s.id)}
+                            />
+                          ))}
+                        </Reorder.Group>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </FolderReorderItem>
+            );
+          })}
+        </Reorder.Group>
+      )}
 
       {looseServers.filter(matches).length > 0 &&
         (query || protoFilter !== "all" ? (
