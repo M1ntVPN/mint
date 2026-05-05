@@ -55,22 +55,7 @@ const card: Variants = {
   },
 };
 
-const icon: Variants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { duration: 0.28, ease: [0.2, 0.8, 0.2, 1], delay: 0.08 },
-  },
-};
 
-const value: Variants = {
-  hidden: { opacity: 0, y: 6 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.32, ease: [0.2, 0.8, 0.2, 1], delay: 0.12 },
-  },
-};
 
 export function StatsCards({ state, uptime, ping, down, up }: Props) {
   const items = [
@@ -126,26 +111,22 @@ export function StatsCards({ state, uptime, ping, down, up }: Props) {
               }
             />
             <div className="relative flex items-center gap-2 text-[12.5px] text-white/55 mb-1.5">
-              <motion.span
-                variants={icon}
-                className="inline-flex items-center justify-center w-[18px] h-[18px] shrink-0"
-              >
+              <span className="inline-flex items-center justify-center w-[18px] h-[18px] shrink-0">
                 <Icon
                   size={18}
                   className={it.color}
                   strokeWidth={2}
                   absoluteStrokeWidth
                 />
-              </motion.span>
+              </span>
               <span>{it.label}</span>
             </div>
-            <motion.div
-              variants={value}
+            <div
               className="relative text-[15px] font-mono font-normal text-white/95 tracking-tight"
               style={{ fontVariantNumeric: "tabular-nums" }}
             >
               {it.value}
-            </motion.div>
+            </div>
           </motion.div>
         );
       })}
