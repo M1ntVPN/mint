@@ -295,8 +295,12 @@ function AppearanceSection() {
         {/* `flex flex-wrap` instead of a fixed `grid grid-cols-4`: the
             background presets need to reflow into 3 / 2 / 1 columns when
             the Settings pane is narrow. With the old fixed grid the last
-            preset was clipped on the right edge instead of wrapping. */}
-        <div className="flex flex-wrap gap-2 max-w-[380px] justify-end">
+            preset was clipped on the right edge instead of wrapping.
+            `justify-start` keeps tiles packed from the left, so when the
+            7 presets wrap into a 4 + 3 layout the empty slot lands at the
+            bottom-right of the row rather than the bottom-left (which
+            previously read as a missing tile under "Стандарт"). */}
+        <div className="flex flex-wrap gap-2 max-w-[380px] justify-start">
           {(
             [
               { key: "default", label: "Стандарт" },
