@@ -626,7 +626,7 @@ function FolderHeader({
           className="text-[14px] text-white/90 bg-white/[0.05] border border-white/10 rounded px-1.5 py-0.5 outline-none w-[220px] shrink-0"
         />
       ) : (
-        <div className="flex flex-col leading-tight min-w-0 shrink-0 w-[220px]">
+        <div className="flex flex-col leading-tight min-w-0 shrink-0 max-w-[220px]">
           <span className="text-[14px] text-white/85 font-medium truncate">
             {folder.name}
           </span>
