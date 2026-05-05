@@ -47,7 +47,7 @@ export function Dashboard(props: Props) {
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(circle at 55% 32%, rgba(139,92,246,0.18), transparent 45%), radial-gradient(circle at 50% 90%, rgba(16,185,129,0.10), transparent 60%)",
+            "radial-gradient(circle at 55% 32%, rgba(var(--accent-rgb),0.18), transparent 45%), radial-gradient(circle at 50% 90%, rgba(16,185,129,0.10), transparent 60%)",
         }}
       />
 

@@ -113,22 +113,29 @@
   animation: mint-pulse 2.6s ease-in-out infinite;
 }
 
-@keyframes violet-pulse {
+/* Pulse that follows the user-picked accent. The keyframes reference
+   --accent-rgb on :root so re-picking the accent in Settings retints
+   the connect-button halo immediately, with no remount. */
+@keyframes accent-pulse {
   0%, 100% {
     box-shadow:
-      0 0 0 0 rgba(139, 92, 246, 0.4),
-      0 0 60px 4px rgba(139, 92, 246, 0.35),
+      0 0 0 0 rgba(var(--accent-rgb), 0.4),
+      0 0 60px 4px rgba(var(--accent-rgb), 0.35),
       inset 0 0 50px rgba(255, 255, 255, 0.06);
   }
   50% {
     box-shadow:
-      0 0 0 18px rgba(139, 92, 246, 0),
-      0 0 80px 10px rgba(139, 92, 246, 0.55),
+      0 0 0 18px rgba(var(--accent-rgb), 0),
+      0 0 80px 10px rgba(var(--accent-rgb), 0.55),
       inset 0 0 60px rgba(255, 255, 255, 0.1);
   }
 }
+.accent-pulse {
+  animation: accent-pulse 2.4s ease-in-out infinite;
+}
+/* Backwards-compat alias — old class name still in some screenshots. */
 .violet-pulse {
-  animation: violet-pulse 2.4s ease-in-out infinite;
+  animation: accent-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes idle-breathe {
@@ -190,7 +197,7 @@
   border-radius: 16px;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.04),
-    0 0 0 1px rgba(139,92,246,0.04);
+    0 0 0 1px rgba(var(--accent-rgb),0.04);
 }
 
 /* Marquee-like dashed motion */
@@ -217,9 +224,10 @@
 .aurora-drift-b { animation: aurora-drift-b 28s ease-in-out infinite; }
 .aurora-drift-c { animation: aurora-drift-c 32s ease-in-out infinite; }
 
-/* Fancy text gradient */
-.text-gradient-violet {
-  background: linear-gradient(135deg, #c4b5fd 0%, #8b5cf6 60%, #6d28d9 100%);
+/* Fancy text gradient — follows the picked accent. */
+.text-gradient-violet,
+.text-gradient-accent {
+  background: linear-gradient(135deg, var(--accent-300) 0%, var(--accent-500) 60%, var(--accent-600) 100%);
   -webkit-background-clip: text;
           background-clip: text;
   color: transparent;
@@ -245,16 +253,51 @@ input, textarea, [contenteditable="true"], .selectable-text {
 .bg-accent-grad {
   background-image: linear-gradient(135deg, var(--accent-from), var(--accent-to));
 }
+.bg-accent-grad-rich {
+  background-image: linear-gradient(135deg, var(--accent-300), var(--accent-500), var(--accent-to));
+}
+.bg-accent-faint {
+  background: rgba(var(--accent-rgb), 0.07);
+}
 .bg-accent-soft {
   background: rgba(var(--accent-rgb), 0.15);
+}
+.bg-accent-medium {
+  background: rgba(var(--accent-rgb), 0.25);
+}
+.border-accent-faint {
+  border-color: rgba(var(--accent-rgb), 0.20);
 }
 .border-accent-soft {
   border-color: rgba(var(--accent-rgb), 0.35);
 }
+.border-accent-strong {
+  border-color: rgba(var(--accent-rgb), 0.55);
+}
+.ring-accent-soft {
+  --tw-ring-color: rgba(var(--accent-rgb), 0.4);
+}
+.text-accent-200 {
+  color: rgba(var(--accent-rgb), 0.85);
+}
+.text-accent-300 {
+  color: var(--accent-300);
+}
 .text-accent {
   color: var(--accent-400);
 }
+.text-accent-400 {
+  color: var(--accent-400);
+}
+.text-accent-500 {
+  color: var(--accent-500);
+}
 .shadow-accent-glow {
   box-shadow: 0 8px 28px -6px rgba(var(--accent-rgb), 0.65);
+}
+/* Accent-driven 3-stop gradient that mirrors the previous violet→fuchsia
+   pulse used on the connect button. */
+.bg-accent-grad-pulse {
+  background-image: linear-gradient(to bottom right, var(--accent-300), var(--accent-500), var(--accent-to));
 }
 

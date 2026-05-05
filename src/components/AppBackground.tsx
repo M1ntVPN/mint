@@ -157,8 +157,8 @@ export function AppBackground() {
         <WorldMap className="w-full h-full" />
       </div>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full bg-violet-700/20 blur-[120px]" />
-        <div className="absolute top-1/3 -right-40 w-[480px] h-[480px] rounded-full bg-fuchsia-700/15 blur-[120px]" />
+        <div className="absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full bg-[rgba(var(--accent-rgb),0.20)] blur-[120px]" />
+        <div className="absolute top-1/3 -right-40 w-[480px] h-[480px] rounded-full bg-[rgba(var(--accent-rgb),0.15)] blur-[120px]" />
         <div className="absolute -bottom-40 left-1/3 w-[600px] h-[600px] rounded-full bg-emerald-600/10 blur-[140px]" />
       </div>
     </>

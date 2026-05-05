@@ -671,7 +671,7 @@ function TunnelingDesktop() {
                   onChange={(e) => setNewPattern(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addNet()}
                   placeholder="*.netflix.com   или   10.0.0.0/8"
-                  className="w-full h-10 pl-9 pr-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-[13.5px] text-white placeholder:text-white/35 focus:outline-none focus:border-violet-400/40 transition-colors"
+                  className="w-full h-10 pl-9 pr-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-[13.5px] text-white placeholder:text-white/35 focus:outline-none focus:border-[rgba(var(--accent-rgb),0.4)] transition-colors"
                 />
               </div>
               <Dropdown
@@ -1001,7 +1001,7 @@ function AppPickerModal({
 
             <div className="flex items-center gap-2 mb-3">
               <div className="flex items-center gap-1.5 text-[12.5px] text-white/50 shrink-0">
-                <Folder size={12} className="text-violet-300/80" />
+                <Folder size={12} className="text-accent-300" />
                 Папка:
               </div>
               {folders.length > 0 && (
@@ -1270,7 +1270,7 @@ function MoveToFolderMenu({
                     : "text-white/80 hover:bg-white/[0.04]"
                 )}
               >
-                <Folder size={13} className="text-violet-300/90" />
+                <Folder size={13} className="text-accent-300" />
                 <span className="truncate">{f.name}</span>
               </button>
             ))}
@@ -1334,7 +1334,7 @@ function FolderGroup({
         >
           <ChevronRight size={14} className="text-white/40" />
         </motion.div>
-        <Folder size={16} className="text-violet-300/90 shrink-0" />
+        <Folder size={16} className="text-accent-300 shrink-0" />
         {editing ? (
           <input
             autoFocus
@@ -1405,7 +1405,7 @@ function FolderGroup({
             }}
             className="overflow-hidden"
           >
-            <div className="ml-[22px] pl-3 my-1 border-l-2 border-violet-400/20 divide-y divide-white/[0.04]">
+            <div className="ml-[22px] pl-3 my-1 border-l-2 border-accent-faint divide-y divide-white/[0.04]">
               {apps.length === 0 ? (
                 <div className="text-[12px] text-white/35 px-2 py-1.5">
                   Пусто — добавьте приложение через «+ Добавить» выше.

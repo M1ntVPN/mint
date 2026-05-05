@@ -335,7 +335,7 @@ export function ProfilesPage({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Поиск по имени, стране, протоколу…"
-            className="w-full h-10 pl-9 pr-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-[14px] text-white placeholder:text-white/35 focus:outline-none focus:border-violet-400/40 transition"
+            className="w-full h-10 pl-9 pr-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-[14px] text-white placeholder:text-white/35 focus:outline-none focus:border-[rgba(var(--accent-rgb),0.4)] transition"
           />
         </div>
 
@@ -694,7 +694,7 @@ function SubscriptionFolder({
             </span>
             <div className="w-32 h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
               <div
-                className="h-full transition-all bg-violet-400/60"
+                className="h-full transition-all bg-[rgba(var(--accent-rgb),0.6)]"
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -927,7 +927,7 @@ function SortMenu({
                 className={cn(
                   "w-full flex items-center justify-between px-3 h-8 text-[13.5px] transition",
                   sort === s.key
-                    ? "text-violet-200 bg-violet-500/15"
+                    ? "text-accent-300 bg-accent-soft"
                     : "text-white/80 hover:bg-white/[0.05]"
                 )}
               >
@@ -1021,7 +1021,7 @@ function ServerRow({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 3 }}
               transition={{ duration: 0.16 }}
-              className="bg-white/[0.06] rounded-md px-2 py-0.5 text-[14px] text-white outline-none border border-violet-400/40 w-[210px]"
+              className="bg-white/[0.06] rounded-md px-2 py-0.5 text-[14px] text-white outline-none border border-accent-soft w-[210px]"
             />
           ) : (
             <motion.span

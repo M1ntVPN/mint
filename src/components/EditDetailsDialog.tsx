@@ -77,8 +77,8 @@ export function EditDetailsDialog({
             className="relative w-[440px] max-w-[92vw] rounded-2xl bg-ink-900/95 border border-white/10 p-5 shadow-2xl"
           >
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-400/25 grid place-items-center">
-                <Edit2 size={15} className="text-violet-300" />
+              <div className="w-8 h-8 rounded-lg bg-accent-soft border border-accent-soft grid place-items-center">
+                <Edit2 size={15} className="text-accent-300" />
               </div>
               <div className="text-[15px] font-semibold text-white/95 truncate">
                 {title}
@@ -106,7 +106,7 @@ export function EditDetailsDialog({
                 if (e.key === "Escape") onClose();
               }}
               placeholder={namePlaceholder}
-              className="w-full h-10 px-3 rounded-lg bg-white/[0.04] border border-white/10 outline-none text-[14px] text-white/90 placeholder:text-white/30 focus:border-violet-400/40 transition"
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.04] border border-white/10 outline-none text-[14px] text-white/90 placeholder:text-white/30 focus:border-[rgba(var(--accent-rgb),0.4)] transition"
             />
 
             <label className="text-[12px] text-white/55 mt-4 mb-1 block">
@@ -127,7 +127,7 @@ export function EditDetailsDialog({
               }}
               placeholder={descriptionPlaceholder}
               rows={3}
-              className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/10 outline-none text-[13.5px] text-white/85 placeholder:text-white/30 focus:border-violet-400/40 transition resize-none leading-relaxed"
+              className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/10 outline-none text-[13.5px] text-white/85 placeholder:text-white/30 focus:border-[rgba(var(--accent-rgb),0.4)] transition resize-none leading-relaxed"
             />
 
             <div className="flex items-center justify-between gap-2 mt-5">
@@ -138,7 +138,7 @@ export function EditDetailsDialog({
                   "h-10 px-4 rounded-lg text-[13.5px] font-medium transition",
                   !canSave
                     ? "bg-white/[0.05] text-white/45 cursor-not-allowed"
-                    : "bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white shadow-[0_8px_24px_-8px_rgba(139,92,246,0.7)] hover:brightness-110"
+                    : "bg-accent-grad text-white shadow-accent-glow hover:brightness-110"
                 )}
               >
                 Сохранить
