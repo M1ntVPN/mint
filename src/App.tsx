@@ -79,6 +79,7 @@ function App() {
   }, [state]);
 
   const autoConnectedRef = useRef(false);
+  const serverCount = useServers((s) => s.servers.length);
   useEffect(() => {
     if (isMobilePlatform()) return;
     if (autoConnectedRef.current) return;
@@ -88,11 +89,15 @@ function App() {
     const servers = useServers.getState().servers;
     if (servers.length === 0) return;
     autoConnectedRef.current = true;
-    setSelectedId((id) => id ?? servers[0].id);
+    const lastId = vals["mint.lastServerId"] as string | undefined;
+    const target = lastId && servers.find((s) => s.id === lastId)
+      ? lastId
+      : servers[0].id;
+    setSelectedId((id) => id ?? target);
     window.setTimeout(() => {
       toggle().catch(() => undefined);
     }, 250);
-  }, [state]);
+  }, [state, serverCount]);
 
   useEffect(() => {
     if (tickRef.current) window.clearInterval(tickRef.current);
@@ -299,6 +304,7 @@ function App() {
       await startEngine({ exit: realExit, entry });
       setHasRealEngine(true);
       setState("connected");
+      useSettingsStore.getState().set("mint.lastServerId", targetId ?? realExit.id);
       setUptime(0);
       setDown(0);
       setUp(0);
