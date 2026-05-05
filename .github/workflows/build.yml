@@ -248,3 +248,45 @@ jobs:
             artifacts/mint-vpn-windows-portable/*.zip
             artifacts/mint-vpn-windows-updater/*.exe.sig
             artifacts/mint-vpn-windows-updater/latest.json
+
+      # Mirror latest.json onto a dedicated `release-mirror` branch so the
+      # Tauri updater has a fallback endpoint that does NOT depend on
+      # github.com being reachable. RKN periodically blackholes the
+      # release-asset CDN (and even github.com itself), which causes
+      # `checkForUpdates` to fail with `error sending request for url`
+      # before download even starts. jsDelivr serves the same bytes from
+      # Cloudflare/Fastly POPs that survive those incidents, and
+      # raw.githubusercontent.com is a third independent path.
+      - name: Mirror latest.json to release-mirror branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          MANIFEST="artifacts/mint-vpn-windows-updater/latest.json"
+          test -f "$MANIFEST" || { echo "latest.json not found at $MANIFEST"; exit 1; }
+          MIRROR_DIR="$(mktemp -d)"
+          cd "$MIRROR_DIR"
+          git init -q -b release-mirror
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp "$GITHUB_WORKSPACE/$MANIFEST" latest.json
+          # Anchor the file to the specific tag so users can verify which
+          # release this manifest came from without consulting GitHub UI.
+          echo "${{ github.ref_name }}" > VERSION
+          git add latest.json VERSION
+          git commit -q -m "release-mirror: ${{ github.ref_name }}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          # Force-push: this branch is a single-commit mirror, never merged
+          # into main and never read for git history — only the file is
+          # consumed (via jsDelivr / raw.githubusercontent.com).
+          git push -f origin "HEAD:refs/heads/release-mirror"
+
+      - name: Purge jsDelivr cache for release-mirror
+        # Best-effort: jsDelivr branch caches stay fresh for ~24h, but we
+        # call the purge URL so the new latest.json shows up immediately
+        # for users on a fast update cadence.
+        continue-on-error: true
+        run: |
+          curl -fsS -X POST \
+            "https://purge.jsdelivr.net/gh/${{ github.repository }}@release-mirror/latest.json" \
+            -o /dev/null -w "purge status %{http_code}\n" || true

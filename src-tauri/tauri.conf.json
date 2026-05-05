@@ -68,7 +68,9 @@
       "active": true,
       "dialog": false,
       "endpoints": [
-        "https://github.com/M1ntVPN/mint/releases/latest/download/latest.json"
+        "https://github.com/M1ntVPN/mint/releases/latest/download/latest.json",
+        "https://cdn.jsdelivr.net/gh/M1ntVPN/mint@release-mirror/latest.json",
+        "https://raw.githubusercontent.com/M1ntVPN/mint/release-mirror/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYxMDlDQjY5RUM4RTE0RjAKUldUd0ZJN3NhY3NKWWJ4R055d2hNZUk1SWpITVFKTWZhTmgxV0kybDZlUHNGVFp5UHVBZldYc2EK",
       "windows": {
