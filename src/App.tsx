@@ -93,7 +93,15 @@ function App() {
     const target = lastId && servers.find((s) => s.id === lastId)
       ? lastId
       : servers[0].id;
-    setSelectedId((id) => id ?? target);
+    // Force the selection synchronously: the default-selection effect
+    // below also fires on the same render and unconditionally calls
+    // `setSelectedId(savedServers[0].id)`. With React's batching the
+    // direct-value setter wins over our functional setter, which made
+    // auto-connect ignore `mint.lastServerId` and always reconnect to
+    // the *first* server in the list (e.g. Sweden) instead of the last
+    // one the user actually used (e.g. Spain).
+    selectedIdRef.current = target;
+    setSelectedId(target);
     window.setTimeout(() => {
       toggle().catch(() => undefined);
     }, 250);
@@ -169,7 +177,18 @@ function App() {
 
   useEffect(() => {
     if (selectedId == null && savedServers.length > 0) {
-      setSelectedId(savedServers[0].id);
+      // Prefer the last-used server so the dashboard shows the same
+      // selection the user had at shutdown — both for visual continuity
+      // and so manual `toggle()` (without auto-connect) still hits the
+      // expected exit.
+      const lastId = useSettingsStore.getState().values[
+        "mint.lastServerId"
+      ] as string | undefined;
+      const fallback =
+        lastId && savedServers.find((s) => s.id === lastId)
+          ? lastId
+          : savedServers[0].id;
+      setSelectedId(fallback);
     }
   }, [savedServers, selectedId]);
 
