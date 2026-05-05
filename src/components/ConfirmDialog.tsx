@@ -71,7 +71,7 @@ export function ConfirmDialog({
                   "w-10 h-10 rounded-xl grid place-items-center shrink-0",
                   destructive
                     ? "bg-rose-500/15 border border-rose-400/25 text-rose-300"
-                    : "bg-violet-500/15 border border-violet-400/25 text-violet-300"
+                    : "bg-accent-soft border border-accent-soft text-accent-300"
                 )}
               >
                 <AlertTriangle size={18} />
@@ -96,7 +96,7 @@ export function ConfirmDialog({
                   "h-9 px-4 rounded-lg text-[13.5px] font-medium text-white border transition",
                   destructive
                     ? "bg-gradient-to-r from-rose-500 to-rose-600 hover:brightness-110 border-rose-400/40 shadow-[0_8px_24px_-8px_rgba(244,63,94,0.7)]"
-                    : "bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:brightness-110 border-violet-400/40 shadow-[0_8px_24px_-8px_rgba(139,92,246,0.7)]"
+                    : "bg-accent-grad shadow-accent-glow hover:brightness-110 border-accent-soft"
                 )}
               >
                 {confirmLabel}

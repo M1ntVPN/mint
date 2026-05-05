@@ -53,8 +53,8 @@ export function CreateFolderDialog({ open, onClose, onCreated }: Props) {
             className="relative w-[420px] rounded-2xl bg-ink-900/95 border border-white/10 p-5 shadow-2xl"
           >
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-400/25 grid place-items-center">
-                <FolderPlus size={15} className="text-violet-300" />
+              <div className="w-8 h-8 rounded-lg bg-accent-soft border-accent-soft border grid place-items-center">
+                <FolderPlus size={15} className="text-accent-300" />
               </div>
               <div className="text-[15px] font-semibold text-white/95">
                 Новая папка
@@ -79,7 +79,7 @@ export function CreateFolderDialog({ open, onClose, onCreated }: Props) {
                 if (e.key === "Escape") onClose();
               }}
               placeholder="Например: Стриминг"
-              className="w-full h-10 px-3 rounded-lg bg-white/[0.04] border border-white/10 outline-none text-[14px] text-white/90 placeholder:text-white/30 focus:border-violet-400/40 transition"
+              className="w-full h-10 px-3 rounded-lg bg-white/[0.04] border border-white/10 outline-none text-[14px] text-white/90 placeholder:text-white/30 focus:border-[rgba(var(--accent-rgb),0.4)] transition"
             />
 
             <div className="flex items-center justify-between gap-2 mt-5">

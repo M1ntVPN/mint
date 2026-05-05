@@ -848,7 +848,8 @@ function App() {
         cb?: (event: {
           event: "Started" | "Progress" | "Finished";
           data?: { contentLength?: number; chunkLength?: number };
-        }) => void
+        }) => void,
+        options?: { timeout?: number; headers?: Record<string, string> },
       ) => Promise<void>;
     };
     try {
@@ -912,7 +913,8 @@ function App() {
           setTimeout(flush, 50 - elapsed);
         }
       };
-      await inst.downloadAndInstall((event) => {
+      await inst.downloadAndInstall(
+        (event) => {
         if (event.event === "Started") {
           const cl = event.data?.contentLength ?? 0;
           if (cl > total) total = cl;
@@ -929,7 +931,11 @@ function App() {
           const final = total || downloaded;
           setUpdateProgress({ done: final, total: final, percent: 100 });
         }
-      });
+        },
+        // 5 minutes — Windows installer download is ~80MB and on slow links
+        // the default 30s would surface as a transient send-stage failure.
+        { timeout: 300_000 },
+      );
       try {
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
@@ -983,7 +989,39 @@ function App() {
     }
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
-      const result = await check();
+      // GitHub's redirect chain (releases/latest/download/* → release-assets…)
+      // can take a few seconds on flaky networks. Use a generous timeout and
+      // retry transient send-stage failures so a single TCP/TLS hiccup
+      // doesn't surface to the user as "Проверка обновлений не удалась".
+      let result: Awaited<ReturnType<typeof check>> | undefined;
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          result = await check({ timeout: 30000 });
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const msg = typeof err === "string" ? err : (err as Error)?.message ?? "";
+          // Only retry transient HTTP send-stage errors; on TLS/DNS-level
+          // permafails or schema errors we surface the original error.
+          const isTransient =
+            /error sending request|timed out|timeout|connection (closed|reset|aborted)|os error 10054|os error 10060|dns error|temporary failure/i.test(
+              msg,
+            );
+          log({
+            t: ts(),
+            lvl: "WARN",
+            src: "updater",
+            msg: `checkForUpdates attempt ${attempt + 1} failed: ${msg}${
+              attempt < 2 && isTransient ? " — retrying" : ""
+            }`,
+          });
+          if (!isTransient || attempt === 2) break;
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        }
+      }
+      if (lastErr) throw lastErr;
       if (!result) return "uptodate";
       updateRef.current = result;
       const r = result as { version: string; body?: string | null };

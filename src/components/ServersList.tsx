@@ -213,8 +213,8 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
     <div className="w-full h-full flex flex-col rounded-2xl bg-gradient-to-b from-white/[0.04] to-white/[0.015] border border-white/[0.07] p-4">
       <div className="flex items-center gap-2 mb-3">
         <div className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-400/25 grid place-items-center">
-            <ServerIcon size={17} className="text-violet-300" />
+          <div className="w-8 h-8 rounded-lg bg-accent-soft border border-accent-soft grid place-items-center">
+            <ServerIcon size={17} className="text-accent-300" />
           </div>
           <div className="text-[15px] font-semibold text-white">Серверы</div>
           <div className="text-[13px] text-white/45 px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/5 font-mono">
@@ -317,7 +317,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                       "pt-1 ml-[18px] pl-3 border-l-2",
                       folder.pinned
                         ? "border-amber-400/25"
-                        : "border-violet-400/20"
+                        : "border-accent-faint"
                     )}
                   >
                     {filtered.length === 0 ? (
@@ -385,7 +385,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                           "pt-1 ml-[18px] pl-3 border-l-2",
                           folder.pinned
                             ? "border-amber-400/25"
-                            : "border-violet-400/20"
+                            : "border-accent-faint"
                         )}
                       >
                         <Reorder.Group
@@ -633,7 +633,7 @@ function FolderHeader({
           className="text-amber-300 fill-amber-300/30 shrink-0"
         />
       ) : (
-        <Folder size={18} className="text-violet-300/90 shrink-0" />
+        <Folder size={18} className="text-accent-300 shrink-0" />
       )}
       {editing ? (
         <input
@@ -678,11 +678,11 @@ function FolderHeader({
         >
           {pct !== null ? (
             <div
-              className="absolute inset-y-0 left-0 transition-all bg-violet-500/20"
+              className="absolute inset-y-0 left-0 transition-all bg-accent-medium"
               style={{ width: `${pct}%` }}
             />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(var(--accent-rgb),0.2)] to-transparent" />
           )}
           <div className="absolute inset-0 flex items-center justify-center px-2.5 min-w-0">
             <span className="text-[11.5px] font-mono tabular-nums text-white/90 truncate">
@@ -901,7 +901,7 @@ function IconBtn({
       className={cn(
         "w-8 h-8 rounded-lg grid place-items-center transition border shrink-0",
         highlight
-          ? "bg-violet-500/15 border-violet-400/30 text-violet-200 hover:bg-violet-500/25"
+          ? "bg-accent-soft border-accent-soft text-accent-300 hover:bg-accent-medium"
           : "bg-white/[0.04] border-white/5 text-white/55 hover:text-white hover:bg-white/[0.07]",
         disabled && "opacity-40 cursor-not-allowed hover:text-white/55"
       )}
@@ -1126,7 +1126,7 @@ function ServerRow({
       className={cn(
         "group relative w-full flex items-center gap-3 px-3 h-12 rounded-lg transition-colors border text-left cursor-pointer",
         selected
-          ? "bg-violet-500/15 border-violet-400/30 shadow-[inset_0_0_24px_rgba(139,92,246,0.15)]"
+          ? "bg-accent-soft border-accent-soft shadow-[inset_0_0_24px_rgba(var(--accent-rgb),0.15)]"
           : isPinned
             ? "bg-amber-500/[0.06] border-amber-400/15 hover:bg-amber-500/[0.09]"
             : "bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.05] hover:border-white/[0.08]"
@@ -1151,7 +1151,7 @@ function ServerRow({
       ) : server.premium ? (
         <Crown size={15} className="text-amber-300" />
       ) : (
-        <Zap size={15} className="text-violet-300/80" />
+        <Zap size={15} className="text-accent-300" />
       )}
       {editing ? (
         <input
@@ -1431,7 +1431,7 @@ function MenuItem({
       />
       <span className="flex-1 truncate">{label}</span>
       {checked && (
-        <FolderInput size={11} className="text-violet-300 shrink-0" />
+        <FolderInput size={11} className="text-accent-300 shrink-0" />
       )}
     </button>
   );
@@ -1469,7 +1469,7 @@ function ProtoChip({
         <motion.span
           layoutId="serversProtoChip"
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
-          className="absolute inset-0 bg-violet-500/25 border border-violet-400/30 rounded-md"
+          className="absolute inset-0 bg-accent-medium border border-accent-soft rounded-md"
         />
       )}
       <span className="relative">{label}</span>
