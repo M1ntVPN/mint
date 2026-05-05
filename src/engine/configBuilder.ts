@@ -281,6 +281,7 @@ export function buildSingboxConfig(opts: BuildOptions): string {
     route: (() => {
       const baseRules: Record<string, unknown>[] = [
         { protocol: "dns", outbound: "dns-out" },
+        { process_name: ["Mint", "Mint.exe"], outbound: "direct" },
         { ip_is_private: true, outbound: "direct" },
       ];
       let finalOut: "proxy" | "direct" = "proxy";
