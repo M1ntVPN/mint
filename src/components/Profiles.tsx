@@ -666,20 +666,11 @@ function SubscriptionFolder({
         {pct !== null && (
           <div className="hidden md:flex flex-col items-end gap-1 mr-1.5">
             <span className="text-[11px] text-white/55 tabular-nums font-mono">
-              {fmtBytes(used)} / {fmtBytes(total)}
+              {fmtBytes(used)}
             </span>
             <div className="w-32 h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
               <div
-                className={cn(
-                  "h-full transition-all",
-                  pct < 60
-                    ? "bg-emerald-400"
-                    : pct < 80
-                      ? "bg-lime-400"
-                      : pct < 95
-                        ? "bg-amber-400"
-                        : "bg-rose-400"
-                )}
+                className="h-full transition-all bg-violet-400/60"
                 style={{ width: `${pct}%` }}
               />
             </div>
