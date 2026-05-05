@@ -780,11 +780,9 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const doCheck = async () => {
       try {
         if (isMobilePlatform()) {
-          // Android: poll GitHub releases for the latest v*-android tag
-          // and surface a banner that links to the APK download.
           const info = (await invoke("app_version")) as { version: string };
           const release = await checkAndroidUpdate(info.version);
           if (cancelled || !release) return;
@@ -800,9 +798,12 @@ function App() {
         setUpdate({ version: r.version, notes: r.body ?? undefined });
       } catch {
       }
-    })();
+    };
+    doCheck();
+    const interval = window.setInterval(doCheck, 30 * 60 * 1000);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
     };
   }, []);
 
