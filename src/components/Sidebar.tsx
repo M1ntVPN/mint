@@ -8,10 +8,13 @@ import {
   Split,
   Sparkles,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "../utils/cn";
 import { useTheme } from "../theme";
+import { useSetting } from "../store/settings";
 import type { ConnState } from "../types";
 
 export type PageKey = "home" | "profiles" | "tunneling" | "settings" | "logs";
@@ -51,6 +54,7 @@ export function Sidebar({
 }: Props) {
   const { iconVariant } = useTheme();
   const brandSrc = iconVariant === "leaf" ? "/mint-leaf.png" : "/mint-shield.png";
+  const [collapsed, setCollapsed] = useSetting<boolean>("sidebarCollapsed", false);
   const [version, setVersion] = useState<string>("");
   useEffect(() => {
     (async () => {
@@ -69,16 +73,13 @@ export function Sidebar({
         : "from-violet-500/15";
 
   return (
-    <aside className="w-[230px] shrink-0 h-full flex flex-col px-3 pt-4 pb-4 border-r border-white/[0.05] bg-ink-900/60 backdrop-blur-xl">
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="relative p-3.5 mb-4 overflow-hidden antialiased rounded-2xl bg-gradient-to-b from-white/[0.05] to-white/[0.02] border border-white/[0.08]"
-      >
-        <div className={cn("pointer-events-none absolute -top-12 -right-10 w-32 h-32 rounded-full bg-gradient-to-br to-transparent blur-2xl transition-colors duration-700", haloColor)} />
-        <div className="relative flex items-center gap-2.5">
-          <div className="relative w-12 h-12 shrink-0">
+    <aside className={cn(
+      "shrink-0 h-full flex flex-col pt-4 pb-4 border-r border-white/[0.05] bg-ink-900/60 backdrop-blur-xl transition-[width,padding] duration-200",
+      collapsed ? "w-[52px] px-1.5" : "w-[230px] px-3"
+    )}>
+      {collapsed ? (
+        <div className="flex flex-col items-center mb-3">
+          <div className="w-8 h-8 shrink-0">
             <img
               src={brandSrc}
               alt="Mint"
@@ -89,14 +90,36 @@ export function Sidebar({
               style={{ imageRendering: "auto" }}
             />
           </div>
-          <div className="flex-1 flex flex-col items-center leading-tight min-w-0">
-            <span className="text-[18px] font-bold tracking-tight text-white">Mint</span>
-            <span className="text-[11.5px] tracking-tight text-white/55 mt-0.5 whitespace-nowrap">
-              VPN client{version ? ` · ${version}` : ""}
-            </span>
-          </div>
         </div>
-      </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="relative p-3.5 mb-4 overflow-hidden antialiased rounded-2xl bg-gradient-to-b from-white/[0.05] to-white/[0.02] border border-white/[0.08]"
+        >
+          <div className={cn("pointer-events-none absolute -top-12 -right-10 w-32 h-32 rounded-full bg-gradient-to-br to-transparent blur-2xl transition-colors duration-700", haloColor)} />
+          <div className="relative flex items-center gap-2.5">
+            <div className="relative w-12 h-12 shrink-0">
+              <img
+                src={brandSrc}
+                alt="Mint"
+                draggable={false}
+                width={96}
+                height={96}
+                className="w-full h-full object-contain pointer-events-none select-none"
+                style={{ imageRendering: "auto" }}
+              />
+            </div>
+            <div className="flex-1 flex flex-col items-center leading-tight min-w-0">
+              <span className="text-[18px] font-bold tracking-tight text-white">Mint</span>
+              <span className="text-[11.5px] tracking-tight text-white/55 mt-0.5 whitespace-nowrap">
+                VPN client{version ? ` · ${version}` : ""}
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       <nav className="flex flex-col gap-1.5">
         {NAV.map((item) => {
@@ -106,8 +129,10 @@ export function Sidebar({
             <button
               key={item.key}
               onClick={() => setPage(item.key)}
+              title={collapsed ? item.label : undefined}
               className={cn(
-                "relative flex items-center gap-3 px-3 h-10 rounded-xl text-sm font-medium transition group",
+                "relative flex items-center h-10 rounded-xl text-sm font-medium transition group",
+                collapsed ? "justify-center px-0" : "gap-3 px-3",
                 active
                   ? "text-white"
                   : "text-white/55 hover:text-white hover:bg-white/[0.035]"
@@ -126,8 +151,8 @@ export function Sidebar({
                 />
               )}
               <Icon size={17} />
-              <span className="relative">{item.label}</span>
-              {active && (
+              {!collapsed && <span className="relative">{item.label}</span>}
+              {active && !collapsed && (
                 <span
                   className="absolute right-3 w-1.5 h-1.5 rounded-full"
                   style={{
@@ -143,89 +168,103 @@ export function Sidebar({
 
       <div className="flex-1" />
 
-      <AnimatePresence>
-        {updateError && (
-          <motion.div
-            key="update-error"
-            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30 }}
-            className="relative mb-3 p-3 rounded-xl bg-rose-500/[0.07] border border-rose-400/30 overflow-hidden"
-          >
-            <button
-              onClick={onDismissUpdateError}
-              className="absolute top-1.5 right-1.5 w-6 h-6 grid place-items-center rounded-md text-white/40 hover:text-white hover:bg-white/[0.06] transition"
-              title="Скрыть"
+      {!collapsed && (
+        <AnimatePresence>
+          {updateError && (
+            <motion.div
+              key="update-error"
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 380, damping: 30 }}
+              className="relative mb-3 p-3 rounded-xl bg-rose-500/[0.07] border border-rose-400/30 overflow-hidden"
             >
-              <X size={12} />
-            </button>
-            <div className="flex flex-col leading-snug pr-5">
-              <span className="text-[12px] font-semibold text-rose-200">Ошибка обновления</span>
-              <span className="text-[11px] text-white/65 mt-1">{updateError}</span>
-            </div>
-          </motion.div>
-        )}
-        {update && !updateError && (
-          <motion.div
-            key="update-banner"
-            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30 }}
-            className="relative mb-3 p-3 rounded-xl bg-accent-soft border-accent-soft border overflow-hidden"
-          >
-            {updateBusy === "idle" && (
               <button
-                onClick={onDismissUpdate}
+                onClick={onDismissUpdateError}
                 className="absolute top-1.5 right-1.5 w-6 h-6 grid place-items-center rounded-md text-white/40 hover:text-white hover:bg-white/[0.06] transition"
                 title="Скрыть"
               >
                 <X size={12} />
               </button>
-            )}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-accent-soft border-accent-soft border grid place-items-center text-accent">
-                <Sparkles size={14} />
+              <div className="flex flex-col leading-snug pr-5">
+                <span className="text-[12px] font-semibold text-rose-200">Ошибка обновления</span>
+                <span className="text-[11px] text-white/65 mt-1">{updateError}</span>
               </div>
-              <div className="flex flex-col leading-tight">
-                <span className="text-[12.5px] font-semibold text-white">Доступно {update.version}</span>
-                <span className="text-[11px] text-white/55">
-                  {updateBusy === "downloading"
-                    ? updateProgress && updateProgress.total > 0
-                      ? `Загрузка · ${updateProgress.percent}%`
-                      : "Загрузка…"
-                    : updateBusy === "installing"
-                      ? "Установка…"
-                      : "вышло обновление"}
-                </span>
-              </div>
-            </div>
-            {updateBusy === "downloading" && updateProgress && updateProgress.total > 0 && (
-              <div className="mt-2 h-1 rounded-full bg-white/[0.08] overflow-hidden">
-                <div
-                  className="h-full bg-accent-grad"
-                  style={{
-                    width: `${updateProgress.percent}%`,
-                    transition: "width 200ms linear",
-                  }}
-                />
-              </div>
-            )}
-            <button
-              onClick={onInstallUpdate}
-              disabled={updateBusy !== "idle"}
-              className="mt-2.5 w-full h-8 rounded-lg bg-accent-grad shadow-accent-glow text-white text-[12.5px] font-medium hover:brightness-110 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
+            </motion.div>
+          )}
+          {update && !updateError && (
+            <motion.div
+              key="update-banner"
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 380, damping: 30 }}
+              className="relative mb-3 p-3 rounded-xl bg-accent-soft border-accent-soft border overflow-hidden"
             >
-              {updateBusy === "downloading"
-                ? "Скачивание…"
-                : updateBusy === "installing"
-                  ? "Установка…"
-                  : "Обновить сейчас"}
-            </button>
-          </motion.div>
+              {updateBusy === "idle" && (
+                <button
+                  onClick={onDismissUpdate}
+                  className="absolute top-1.5 right-1.5 w-6 h-6 grid place-items-center rounded-md text-white/40 hover:text-white hover:bg-white/[0.06] transition"
+                  title="Скрыть"
+                >
+                  <X size={12} />
+                </button>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-accent-soft border-accent-soft border grid place-items-center text-accent">
+                  <Sparkles size={14} />
+                </div>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-[12.5px] font-semibold text-white">Доступно {update.version}</span>
+                  <span className="text-[11px] text-white/55">
+                    {updateBusy === "downloading"
+                      ? updateProgress && updateProgress.total > 0
+                        ? `Загрузка · ${updateProgress.percent}%`
+                        : "Загрузка…"
+                      : updateBusy === "installing"
+                        ? "Установка…"
+                        : "вышло обновление"}
+                  </span>
+                </div>
+              </div>
+              {updateBusy === "downloading" && updateProgress && updateProgress.total > 0 && (
+                <div className="mt-2 h-1 rounded-full bg-white/[0.08] overflow-hidden">
+                  <div
+                    className="h-full bg-accent-grad"
+                    style={{
+                      width: `${updateProgress.percent}%`,
+                      transition: "width 200ms linear",
+                    }}
+                  />
+                </div>
+              )}
+              <button
+                onClick={onInstallUpdate}
+                disabled={updateBusy !== "idle"}
+                className="mt-2.5 w-full h-8 rounded-lg bg-accent-grad shadow-accent-glow text-white text-[12.5px] font-medium hover:brightness-110 active:scale-[0.98] transition disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {updateBusy === "downloading"
+                  ? "Скачивание…"
+                  : updateBusy === "installing"
+                    ? "Установка…"
+                    : "Обновить сейчас"}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        title={collapsed ? "Развернуть" : "Свернуть"}
+        className={cn(
+          "flex items-center h-9 rounded-xl text-white/40 hover:text-white hover:bg-white/[0.05] transition",
+          collapsed ? "justify-center px-0" : "gap-3 px-3"
         )}
-      </AnimatePresence>
+      >
+        {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+        {!collapsed && <span className="text-[13px]">Свернуть</span>}
+      </button>
     </aside>
   );
 }
