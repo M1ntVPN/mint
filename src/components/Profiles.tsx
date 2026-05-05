@@ -199,7 +199,6 @@ export function ProfilesPage({
   }, [contextMenu]);
 
   const handlePing = async (s: SavedServer) => {
-    if (vpnActive) return;
     setPingingId(s.id);
     try {
       const ms = await probe(s);
@@ -212,7 +211,6 @@ export function ProfilesPage({
   };
 
   const handlePingAll = async () => {
-    if (vpnActive) return;
     setPingingAll(true);
     await pingAll(sweepProbe);
     setPingingAll(false);
@@ -241,9 +239,6 @@ export function ProfilesPage({
       const folderId = existing
         ? existing.id
         : useFolders.getState().create(friendly, { subscriptionId: sub.id });
-      if (existing && existing.name !== friendly) {
-        useFolders.getState().rename(folderId, friendly);
-      }
       useFolders.getState().setServerIds(folderId, newIds);
       updateSub(sub.id, {
         name: friendly,
@@ -339,25 +334,16 @@ export function ProfilesPage({
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={handlePingAll}
-          disabled={pingingAll || vpnActive}
-          title={
-            vpnActive ? "Недоступно при активном VPN" : undefined
-          }
+          disabled={pingingAll}
           className={cn(
             "h-10 px-4 rounded-xl flex items-center gap-2 text-[14px] font-medium border transition",
-            vpnActive
-              ? "bg-white/[0.03] text-white/40 border-white/[0.05] cursor-not-allowed"
-              : pingingAll
-                ? "bg-emerald-400/10 text-emerald-300/70 border-emerald-400/20 cursor-wait"
-                : "bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/[0.06]"
+            pingingAll
+              ? "bg-emerald-400/10 text-emerald-300/70 border-emerald-400/20 cursor-wait"
+              : "bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/[0.06]"
           )}
         >
           <RefreshCw size={15} className={pingingAll ? "animate-spin" : ""} />
-          {vpnActive
-            ? "Пинг недоступен"
-            : pingingAll
-              ? "Пингуем…"
-              : "Пинговать всё"}
+          {pingingAll ? "Пингуем…" : "Пинговать всё"}
         </motion.button>
       </div>
 
@@ -389,7 +375,6 @@ export function ProfilesPage({
                   index={i}
                   editing={editingId === s.id}
                   pinging={pingingId === s.id || pingingAll}
-                  vpnActive={vpnActive}
                   onEditStart={() => setEditingId(s.id)}
                   onEditCommit={(name) => {
                     renameServer(s.id, name);
@@ -423,7 +408,6 @@ export function ProfilesPage({
                     index={i}
                     editing={editingId === s.id}
                     pinging={pingingId === s.id || pingingAll}
-                    vpnActive={vpnActive}
                     onEditStart={() => setEditingId(s.id)}
                     onEditCommit={(name) => {
                       renameServer(s.id, name);
@@ -486,10 +470,8 @@ export function ProfilesPage({
             })()}
             <ContextItem
               icon={RefreshCw}
-              label={vpnActive ? "Пинг недоступен при VPN" : "Пинговать"}
-              disabled={vpnActive}
+              label="Пинговать"
               onClick={() => {
-                if (vpnActive) return;
                 const s = servers.find((x) => x.id === contextMenu.id);
                 if (s) handlePing(s);
                 setContextMenu(null);
@@ -950,7 +932,6 @@ function ServerRow({
   index,
   editing,
   pinging,
-  vpnActive,
   onEditStart,
   onEditCommit,
   onEditCancel,
@@ -963,7 +944,6 @@ function ServerRow({
   index: number;
   editing: boolean;
   pinging: boolean;
-  vpnActive: boolean;
   onEditStart: () => void;
   onEditCommit: (name: string) => void;
   onEditCancel: () => void;
@@ -1076,9 +1056,9 @@ function ServerRow({
       <div
         className={cn(
           "text-[13px] font-mono w-14 text-right",
-          vpnActive && ping == null ? "text-white/35" : pingColor
+          pingColor
         )}
-        title={vpnActive ? "Недоступно при активном VPN" : undefined}
+        title={undefined}
       >
         {pinging ? (
           <span className="inline-flex items-center gap-1">
@@ -1095,10 +1075,9 @@ function ServerRow({
       <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition">
         <RowAction
           icon={RefreshCw}
-          title={vpnActive ? "Недоступно при активном VPN" : "Пинговать"}
+          title="Пинговать"
           spinning={pinging}
           onClick={onPing}
-          disabled={vpnActive}
         />
         <RowAction
           icon={Star}

@@ -19,6 +19,7 @@ import {
   Pin,
   PinOff,
   GripVertical,
+  Copy,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -33,7 +34,6 @@ import { useFolders, type Folder as FolderEntry } from "../store/folders";
 import { useServers, type SavedServer } from "../store/servers";
 import { useSubscriptions, type Subscription } from "../store/subscriptions";
 import { probeServer } from "../utils/ping";
-import { useConnection } from "../store/connection";
 import { useSettingsStore } from "../store/settings";
 import { mapPool } from "../utils/mapPool";
 
@@ -95,11 +95,10 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
   }, [subs]);
   const [pingingFolder, setPingingFolder] = useState<Set<string>>(new Set());
   const [pingingAllGlobal, setPingingAllGlobal] = useState(false);
-  const vpnActive = useConnection((s) => s.state === "connected");
   const sweepProbe = (s: SavedServer) =>
     probeServer(s, { attempts: 2, timeoutMs: 3000 });
   const pingFolder = async (folder: FolderEntry) => {
-    if (pingingFolder.has(folder.id) || vpnActive) return;
+    if (pingingFolder.has(folder.id)) return;
     setPingingFolder((p) => new Set(p).add(folder.id));
     const items = folder.serverIds
       .map((id) => allSavedServers.find((x) => x.id === id))
@@ -119,7 +118,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
     });
   };
   const pingAllServers = async () => {
-    if (pingingAllGlobal || vpnActive) return;
+    if (pingingAllGlobal) return;
     setPingingAllGlobal(true);
     try {
       await mapPool(allSavedServers, 16, async (srv) => {
@@ -269,14 +268,12 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
           <IconBtn
             icon={RefreshCw}
             onClick={pingAllServers}
-            disabled={pingingAllGlobal || servers.length === 0 || vpnActive}
+            disabled={pingingAllGlobal || servers.length === 0}
             spinning={pingingAllGlobal}
             title={
-              vpnActive
-                ? "Недоступно при активном VPN"
-                : pingingAllGlobal
-                  ? "Пингуем все серверы…"
-                  : "Пинговать все серверы"
+              pingingAllGlobal
+                ? "Пингуем все серверы…"
+                : "Пинговать все серверы"
             }
           />
         </div>
@@ -317,7 +314,6 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
               subscription={sub}
               onPingAll={() => pingFolder(folder)}
               pingingAll={pingingFolder.has(folder.id)}
-              vpnActive={vpnActive}
             >
               <AnimatePresence initial={false}>
                 {isOpen && (
@@ -442,7 +438,6 @@ function FolderReorderItem({
   subscription,
   onPingAll,
   pingingAll,
-  vpnActive,
   children,
 }: {
   folder: FolderEntry;
@@ -452,7 +447,6 @@ function FolderReorderItem({
   subscription?: Subscription;
   onPingAll: () => void;
   pingingAll: boolean;
-  vpnActive: boolean;
   children?: React.ReactNode;
 }) {
   const controls = useDragControls();
@@ -466,7 +460,6 @@ function FolderReorderItem({
         subscription={subscription}
         onPingAll={onPingAll}
         pingingAll={pingingAll}
-        vpnActive={vpnActive}
         dragControls={controls}
       />
       {children}
@@ -504,7 +497,6 @@ function FolderHeader({
   subscription,
   onPingAll,
   pingingAll,
-  vpnActive,
   dragControls,
 }: {
   folder: FolderEntry;
@@ -514,7 +506,6 @@ function FolderHeader({
   subscription?: Subscription;
   onPingAll: () => void;
   pingingAll: boolean;
-  vpnActive: boolean;
   dragControls?: ReturnType<typeof useDragControls>;
 }) {
   const removeFolder = useFolders((s) => s.remove);
@@ -734,17 +725,14 @@ function FolderHeader({
             onPingAll();
           }}
           title={
-            vpnActive
-              ? "Недоступно при активном VPN"
-              : pingingAll
-                ? "Пингуем…"
-                : "Пропинговать все"
+            pingingAll
+              ? "Пингуем…"
+              : "Пропинговать все"
           }
-          disabled={pingingAll || count === 0 || vpnActive}
+          disabled={pingingAll || count === 0}
           className={cn(
             "transition w-8 h-8 grid place-items-center rounded-md hover:bg-white/5 text-white/55 hover:text-white",
-            pingingAll ? "opacity-100 cursor-default" : "opacity-0 group-hover:opacity-100",
-            vpnActive && "opacity-0"
+            pingingAll ? "opacity-100 cursor-default" : "opacity-0 group-hover:opacity-100"
           )}
         >
           <RefreshCw size={16} className={pingingAll ? "animate-spin" : undefined} />
@@ -802,13 +790,11 @@ function FolderHeader({
             <MenuItem
               icon={RefreshCw}
               label={
-                vpnActive
-                  ? "Пинг недоступен при VPN"
-                  : pingingAll
-                    ? "Пингуем…"
-                    : "Пропинговать все"
+                pingingAll
+                  ? "Пингуем…"
+                  : "Пропинговать все"
               }
-              disabled={pingingAll || count === 0 || vpnActive}
+              disabled={pingingAll || count === 0}
               onClick={() => {
                 setMenu(null);
                 onPingAll();
@@ -837,6 +823,20 @@ function FolderHeader({
               onClick={() => {
                 setMenu(null);
                 togglePinned(folder.id);
+              }}
+            />
+            <MenuItem
+              icon={Copy}
+              label="Скопировать все ссылки"
+              disabled={count === 0}
+              onClick={() => {
+                setMenu(null);
+                const all = useServers.getState().servers;
+                const uris = folder.serverIds
+                  .map((id) => all.find((s) => s.id === id)?.address)
+                  .filter(Boolean)
+                  .join("\n");
+                if (uris) navigator.clipboard.writeText(uris).catch(() => undefined);
               }}
             />
             <div className="my-1 border-t border-white/5" />
@@ -940,7 +940,6 @@ function ServerRow({
   const folders = useFolders((s) => s.folders);
   const moveServer = useFolders((s) => s.move);
   const unindexFromFolder = useFolders((s) => s.unindex);
-  const vpnActive = useConnection((s) => s.state === "connected");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [pinging, setPinging] = useState(false);
@@ -1002,7 +1001,7 @@ function ServerRow({
           : "bg-white/15";
 
   const doPing = async () => {
-    if (!savedServer || pinging || vpnActive) return;
+    if (!savedServer || pinging) return;
     setPinging(true);
     try {
       const ms = await probeServer(savedServer);
@@ -1237,9 +1236,9 @@ function ServerRow({
         <div
           className={cn(
             "text-[13.5px] font-mono w-14 text-right",
-            vpnActive && !measured ? "text-white/35" : pingColor
+            pingColor
           )}
-          title={vpnActive ? "Недоступно при активном VPN" : undefined}
+          title={undefined}
         >
           {pinging ? "…" : measured ? `${server.ping}ms` : "n/a"}
         </div>
@@ -1281,18 +1280,22 @@ function ServerRow({
             <MenuItem
               icon={RefreshCw}
               iconClassName={pinging ? "animate-spin" : undefined}
-              label={
-                vpnActive
-                  ? "Пинг недоступен при VPN"
-                  : pinging
-                    ? "Пингую…"
-                    : "Пинговать"
-              }
+              label={pinging ? "Пингую…" : "Пинговать"}
               onClick={() => {
                 setMenuOpen(false);
                 doPing();
               }}
-              disabled={pinging || vpnActive}
+              disabled={pinging}
+            />
+            <MenuItem
+              icon={Copy}
+              label="Скопировать ссылку"
+              onClick={() => {
+                setMenuOpen(false);
+                if (savedServer?.address) {
+                  navigator.clipboard.writeText(savedServer.address).catch(() => undefined);
+                }
+              }}
             />
             <MenuItem
               icon={Edit2}
