@@ -120,8 +120,8 @@ export function ConnectButton({ state, onClick, serverName, serverCountry, serve
               className="w-full h-full rounded-full"
               style={{
                 background: isConnecting || isDisconnecting
-                  ? "conic-gradient(from 0deg, transparent, rgba(139,92,246,0.55), transparent 35%, rgba(139,92,246,0.25) 60%, transparent 80%)"
-                  : "conic-gradient(from 0deg, transparent, rgba(139,92,246,0.32), transparent 50%, rgba(139,92,246,0.15) 75%, transparent 90%)",
+                  ? "conic-gradient(from 0deg, transparent, rgba(var(--accent-rgb),0.55), transparent 35%, rgba(var(--accent-rgb),0.25) 60%, transparent 80%)"
+                  : "conic-gradient(from 0deg, transparent, rgba(var(--accent-rgb),0.32), transparent 50%, rgba(var(--accent-rgb),0.15) 75%, transparent 90%)",
                 mask: "radial-gradient(circle, transparent 60%, #000 62%, #000 70%, transparent 72%)",
                 WebkitMask:
                   "radial-gradient(circle, transparent 60%, #000 62%, #000 70%, transparent 72%)",
@@ -141,7 +141,7 @@ export function ConnectButton({ state, onClick, serverName, serverCountry, serve
             cy="50"
             r="46"
             fill="none"
-            stroke={isOn ? "rgba(167,243,208,0.98)" : "rgba(196,181,253,0.78)"}
+            stroke={isOn ? "rgba(167,243,208,0.98)" : "rgba(var(--accent-rgb),0.78)"}
             strokeWidth={isOn ? 1.6 : 1.0}
             strokeDasharray={isOn ? "3.5 5" : "2.4 5.2"}
             strokeLinecap="round"
@@ -152,7 +152,7 @@ export function ConnectButton({ state, onClick, serverName, serverCountry, serve
                 isOn || isConnecting || isDisconnecting ? "running" : "paused",
               filter: isOn
                 ? "drop-shadow(0 0 5px rgba(52,211,153,0.6))"
-                : "drop-shadow(0 0 3px rgba(139,92,246,0.45))",
+                : "drop-shadow(0 0 3px rgba(var(--accent-rgb),0.45))",
             }}
           />
         </motion.svg>
@@ -168,9 +168,9 @@ export function ConnectButton({ state, onClick, serverName, serverCountry, serve
             isOn
               ? "from-emerald-300 via-emerald-500 to-emerald-700 mint-pulse"
               : isConnecting
-                ? "from-violet-300 via-violet-500 to-fuchsia-700 violet-pulse"
+                ? "bg-accent-grad-pulse accent-pulse"
                 : isDisconnecting
-                  ? "from-violet-400 via-violet-600 to-fuchsia-700 idle-breathe"
+                  ? "bg-accent-grad-pulse idle-breathe"
                   : "from-ink-600 via-ink-700 to-ink-800 idle-breathe border border-white/10"
           )}
         >
@@ -237,8 +237,8 @@ export function ConnectButton({ state, onClick, serverName, serverCountry, serve
           className={cn(
             "text-[18px] font-semibold tracking-tight",
             isOn ? "text-emerald-300" :
-            isConnecting ? "text-violet-200" :
-            isDisconnecting ? "text-violet-300" :
+            isConnecting ? "text-accent-300" :
+            isDisconnecting ? "text-accent-300" :
             "text-white/85"
           )}
         >

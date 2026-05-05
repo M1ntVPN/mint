@@ -63,8 +63,8 @@ export function StatsCards({ state, uptime, ping, down, up }: Props) {
       icon: Timer,
       label: "Время",
       value: state === "connected" ? fmtTime(uptime) : "00:00:00",
-      color: "text-violet-300",
-      glow: "from-violet-400/25",
+      color: "text-accent-300",
+      glow: "from-[rgba(var(--accent-rgb),0.25)]",
     },
     {
       icon: Wifi,

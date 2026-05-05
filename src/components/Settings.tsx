@@ -112,19 +112,19 @@ export function SettingsPage({
                   <motion.div
                     layoutId="settingsActive"
                     transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-500/25 via-violet-500/10 to-transparent border border-violet-400/30 shadow-[inset_0_0_20px_rgba(139,92,246,0.12)]"
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-[rgba(var(--accent-rgb),0.25)] via-[rgba(var(--accent-rgb),0.10)] to-transparent border border-accent-soft shadow-[inset_0_0_20px_rgba(var(--accent-rgb),0.12)]"
                   />
                 )}
                 <Icon
                   size={14}
                   className={cn(
                     "relative",
-                    isActive ? "text-violet-300" : "text-white/40 group-hover:text-white/70"
+                    isActive ? "text-accent-300" : "text-white/40 group-hover:text-white/70"
                   )}
                 />
                 <span className="relative">{c.label}</span>
                 {isActive && (
-                  <ChevronRight size={13} className="relative ml-auto text-violet-300" />
+                  <ChevronRight size={13} className="relative ml-auto text-accent-300" />
                 )}
               </button>
             );
@@ -176,8 +176,8 @@ function SectionCard({
   return (
     <section className="grad-border p-4">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-400/25 grid place-items-center">
-          <Icon size={14} className="text-violet-300" />
+        <div className="w-7 h-7 rounded-lg bg-accent-soft border-accent-soft border grid place-items-center">
+          <Icon size={14} className="text-accent-300" />
         </div>
         <div className="text-[14px] font-semibold text-white">{title}</div>
       </div>
@@ -552,7 +552,7 @@ function NetworkSection() {
               value={remote}
               onChange={(e) => setRemote(e.target.value)}
               placeholder="https://example.com/dns-query"
-              className="w-[260px] h-8 px-2 rounded-md bg-white/[0.04] border border-white/10 text-[13px] text-white/90 outline-none focus:border-violet-400/60"
+              className="w-[260px] h-8 px-2 rounded-md bg-white/[0.04] border border-white/10 text-[13px] text-white/90 outline-none focus:border-[rgba(var(--accent-rgb),0.55)]"
             />
           )}
         </div>
@@ -578,7 +578,7 @@ function NetworkSection() {
               value={local}
               onChange={(e) => setLocal(e.target.value)}
               placeholder="https://example.com/dns-query"
-              className="w-[260px] h-8 px-2 rounded-md bg-white/[0.04] border border-white/10 text-[13px] text-white/90 outline-none focus:border-violet-400/60"
+              className="w-[260px] h-8 px-2 rounded-md bg-white/[0.04] border border-white/10 text-[13px] text-white/90 outline-none focus:border-[rgba(var(--accent-rgb),0.55)]"
             />
           )}
         </div>

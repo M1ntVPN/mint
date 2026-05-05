@@ -70,7 +70,7 @@ export function Sidebar({
       ? "from-emerald-500/20"
       : state === "connecting" || state === "disconnecting"
         ? "from-amber-500/15"
-        : "from-violet-500/15";
+        : "from-[rgba(var(--accent-rgb),0.15)]";
 
   return (
     <aside className={cn(

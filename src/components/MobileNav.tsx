@@ -44,7 +44,7 @@ export function MobileNav({ page, setPage }: Props) {
                 className={cn(
                   "w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl transition-colors",
                   active
-                    ? "text-white bg-gradient-to-b from-violet-500/15 to-violet-500/5"
+                    ? "text-white bg-gradient-to-b from-[rgba(var(--accent-rgb),0.15)] to-[rgba(var(--accent-rgb),0.05)]"
                     : "text-white/55 hover:text-white/85 active:bg-white/[0.04]"
                 )}
               >
