@@ -27,6 +27,8 @@ interface FoldersState {
   togglePinned: (id: string) => void;
   reorder: (ids: string[]) => void;
   reorderServers: (folderId: string, ids: string[]) => void;
+  collapsedProfileIds: string[];
+  toggleProfileCollapsed: (subId: string) => void;
 }
 
 export const useFolders = create<FoldersState>()(
@@ -142,6 +144,13 @@ export const useFolders = create<FoldersState>()(
           }
           return { folders: out };
         }),
+      collapsedProfileIds: [],
+      toggleProfileCollapsed: (subId) =>
+        set((st) => ({
+          collapsedProfileIds: st.collapsedProfileIds.includes(subId)
+            ? st.collapsedProfileIds.filter((x) => x !== subId)
+            : [...st.collapsedProfileIds, subId],
+        })),
       reorderServers: (folderId, ids) =>
         set((st) => ({
           folders: st.folders.map((f) => {
