@@ -16,14 +16,17 @@ import {
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useServers, type SavedServer } from "../store/servers";
-import { useSubscriptions, type Subscription, extractShareUris, parseUserInfo, decodeProfileTitle, urisToServers } from "../store/subscriptions";
-import { invoke } from "@tauri-apps/api/core";
+import { useSubscriptions, type Subscription } from "../store/subscriptions";
 import { Flag } from "./Flag";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AddServerDialog } from "./AddServerDialog";
 import { EditDetailsDialog } from "./EditDetailsDialog";
 import { probeServer } from "../utils/ping";
 import { useFolders } from "../store/folders";
+import {
+  refreshSubscription as runRefreshSubscription,
+  deleteSubscriptionEverywhere,
+} from "../utils/refreshSubscription";
 import { useConnection } from "../store/connection";
 import { useSettingsStore } from "../store/settings";
 import { ChevronDown, RefreshCw, FolderOpen, Trash } from "lucide-react";
@@ -69,16 +72,12 @@ export function ProfilesPage({
 }: ProfilesPageProps = {}) {
   const servers = useServers((s) => s.servers);
   const removeServer = useServers((s) => s.remove);
-  const removeBySub = useServers((s) => s.removeBySubscription);
-  const addManyServers = useServers((s) => s.addMany);
   const renameServer = useServers((s) => s.rename);
   const toggleFav = useServers((s) => s.toggleFavorite);
   const setPing = useServers((s) => s.setPing);
   const pingAll = useServers((s) => s.pingAll);
 
   const subs = useSubscriptions((s) => s.list);
-  const updateSub = useSubscriptions((s) => s.update);
-  const removeSub = useSubscriptions((s) => s.remove);
 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("added-desc");
@@ -220,76 +219,14 @@ export function ProfilesPage({
   const refreshSubscription = async (sub: Subscription) => {
     setRefreshingSub(sub.id);
     try {
-      const resp = await invoke<{
-        body: string;
-        user_info: string | null;
-        update_interval: string | null;
-        title: string | null;
-      }>("fetch_subscription", { url: sub.url });
-      const uris = extractShareUris(resp.body);
-      if (uris.length === 0) {
-        updateSub(sub.id, { lastError: "Подписка пуста или формат не распознан" });
-        return;
-      }
-      const userInfo = parseUserInfo(resp.user_info);
-      const title = decodeProfileTitle(resp.title);
-      const oldServers = useServers.getState().servers.filter(
-        (s) => s.subscriptionId === sub.id
-      );
-      const customMeta = new Map<
-        string,
-        { name: string; description?: string; favorite?: boolean; pinned?: boolean }
-      >();
-      for (const s of oldServers) customMeta.set(s.address, {
-        name: s.name,
-        description: s.description,
-        favorite: s.favorite,
-        pinned: s.pinned,
-      });
-      removeBySub(sub.id);
-      const freshServers = urisToServers(uris, sub.id).map((s) => {
-        const prev = customMeta.get(s.address);
-        if (!prev) return s;
-        return {
-          ...s,
-          name: prev.name,
-          description: prev.description,
-          favorite: prev.favorite,
-          pinned: prev.pinned,
-        };
-      });
-      const newIds = addManyServers(freshServers);
-      const friendly = title || sub.name;
-      const existing = useFolders.getState().findBySubscription(sub.id);
-      const folderId = existing
-        ? existing.id
-        : useFolders.getState().create(friendly, { subscriptionId: sub.id });
-      useFolders.getState().setServerIds(folderId, newIds);
-      updateSub(sub.id, {
-        name: friendly,
-        syncedAt: Date.now(),
-        uploadBytes: userInfo.upload,
-        downloadBytes: userInfo.download,
-        totalBytes: userInfo.total,
-        expiresAt: userInfo.expire,
-        updateIntervalHours: resp.update_interval
-          ? Number(resp.update_interval)
-          : sub.updateIntervalHours,
-        lastError: null,
-      });
-    } catch (e) {
-      updateSub(sub.id, {
-        lastError: typeof e === "string" ? e : "Не удалось обновить",
-      });
+      await runRefreshSubscription(sub);
     } finally {
       setRefreshingSub(null);
     }
   };
 
   const deleteSubscription = (sub: Subscription) => {
-    removeBySub(sub.id);
-    useFolders.getState().removeBySubscription(sub.id);
-    removeSub(sub.id);
+    deleteSubscriptionEverywhere(sub.id);
   };
 
   const toggleCollapsed = (id: string) => toggleProfileCollapsed(id);

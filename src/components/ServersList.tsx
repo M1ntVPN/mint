@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Trash2,
   Zap,
+  Activity,
   Search,
   Crown,
   FolderInput,
@@ -36,6 +37,10 @@ import { useSubscriptions, type Subscription } from "../store/subscriptions";
 import { probeServer } from "../utils/ping";
 import { useSettingsStore } from "../store/settings";
 import { mapPool } from "../utils/mapPool";
+import {
+  refreshSubscription as runRefreshSubscription,
+  deleteSubscriptionEverywhere,
+} from "../utils/refreshSubscription";
 
 function fmtBytes(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "0";
@@ -95,6 +100,21 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
   }, [subs]);
   const [pingingFolder, setPingingFolder] = useState<Set<string>>(new Set());
   const [pingingAllGlobal, setPingingAllGlobal] = useState(false);
+  const [refreshingSub, setRefreshingSub] = useState<Set<string>>(new Set());
+
+  const refreshSubscription = async (sub: Subscription) => {
+    if (refreshingSub.has(sub.id)) return;
+    setRefreshingSub((p) => new Set(p).add(sub.id));
+    try {
+      await runRefreshSubscription(sub);
+    } finally {
+      setRefreshingSub((p) => {
+        const n = new Set(p);
+        n.delete(sub.id);
+        return n;
+      });
+    }
+  };
   const sweepProbe = (s: SavedServer) =>
     probeServer(s, { attempts: 2, timeoutMs: 3000 });
   const pingFolder = async (folder: FolderEntry) => {
@@ -133,25 +153,20 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
       setPingingAllGlobal(false);
     }
   };
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  // Folder open/closed state lives in zustand+persist (`closedFolderIds`)
+  // rather than React-local `useState`. <ServersList> is unmounted when
+  // the user navigates to Profiles and remounted on the way back, which
+  // used to wipe the local state and silently re-expand every folder
+  // on every tab switch (and after every app restart). Storing only the
+  // *closed* IDs keeps the default behaviour “newly created folder is
+  // open” without bookkeeping for new IDs.
+  const closedFolderIds = useFolders((s) => s.closedFolderIds);
+  const toggleFolderClosed = useFolders((s) => s.toggleFolderClosed);
+  const isFolderOpen = (folderId: string) => !closedFolderIds.includes(folderId);
   const [query, setQuery] = useState("");
   const [protoFilter, setProtoFilter] = useState<string>("all");
   const [addOpen, setAddOpen] = useState<false | "subscription" | "uri">(false);
   const [folderDlgOpen, setFolderDlgOpen] = useState(false);
-
-  useEffect(() => {
-    setOpen((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const f of folderStore.folders) {
-        if (next[f.id] === undefined) {
-          next[f.id] = true;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [folderStore.folders]);
 
   const protocols = useMemo(() => {
     const set = new Set<string>();
@@ -293,7 +308,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
       {query || protoFilter !== "all" ? (
         <div className="space-y-1.5">
           {groupedFolders.map(({ folder, items }) => {
-            const isOpen = open[folder.id] ?? true;
+            const isOpen = isFolderOpen(folder.id);
             const filtered = items.filter(matches);
             const sub = folder.subscriptionId
               ? subById.get(folder.subscriptionId)
@@ -304,12 +319,12 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                   folder={folder}
                   count={items.length}
                   isOpen={isOpen}
-                  onToggle={() =>
-                    setOpen((o) => ({ ...o, [folder.id]: !(o[folder.id] ?? true) }))
-                  }
+                  onToggle={() => toggleFolderClosed(folder.id)}
                   subscription={sub}
                   onPingAll={() => pingFolder(folder)}
                   pingingAll={pingingFolder.has(folder.id)}
+                  onRefreshSub={sub ? () => refreshSubscription(sub) : undefined}
+                  refreshingSub={sub ? refreshingSub.has(sub.id) : false}
                 />
                 {isOpen && (
                   <div
@@ -350,7 +365,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
           className="space-y-1.5"
         >
           {groupedFolders.map(({ folder, items }) => {
-            const isOpen = open[folder.id] ?? true;
+            const isOpen = isFolderOpen(folder.id);
             const filtered = items.filter(matches);
             const sub = folder.subscriptionId
               ? subById.get(folder.subscriptionId)
@@ -361,12 +376,12 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                 folder={folder}
                 count={items.length}
                 isOpen={isOpen}
-                onToggle={() =>
-                  setOpen((o) => ({ ...o, [folder.id]: !(o[folder.id] ?? true) }))
-                }
+                onToggle={() => toggleFolderClosed(folder.id)}
                 subscription={sub}
                 onPingAll={() => pingFolder(folder)}
                 pingingAll={pingingFolder.has(folder.id)}
+                onRefreshSub={sub ? () => refreshSubscription(sub) : undefined}
+                refreshingSub={sub ? refreshingSub.has(sub.id) : false}
               >
                 <AnimatePresence initial={false}>
                   {isOpen && (
@@ -464,6 +479,8 @@ function FolderReorderItem({
   subscription,
   onPingAll,
   pingingAll,
+  onRefreshSub,
+  refreshingSub,
   children,
 }: {
   folder: FolderEntry;
@@ -473,6 +490,8 @@ function FolderReorderItem({
   subscription?: Subscription;
   onPingAll: () => void;
   pingingAll: boolean;
+  onRefreshSub?: () => void;
+  refreshingSub?: boolean;
   children?: React.ReactNode;
 }) {
   const controls = useDragControls();
@@ -486,6 +505,8 @@ function FolderReorderItem({
         subscription={subscription}
         onPingAll={onPingAll}
         pingingAll={pingingAll}
+        onRefreshSub={onRefreshSub}
+        refreshingSub={refreshingSub}
         dragControls={controls}
       />
       {children}
@@ -523,6 +544,8 @@ function FolderHeader({
   subscription,
   onPingAll,
   pingingAll,
+  onRefreshSub,
+  refreshingSub,
   dragControls,
 }: {
   folder: FolderEntry;
@@ -532,23 +555,42 @@ function FolderHeader({
   subscription?: Subscription;
   onPingAll: () => void;
   pingingAll: boolean;
+  onRefreshSub?: () => void;
+  refreshingSub?: boolean;
   dragControls?: ReturnType<typeof useDragControls>;
 }) {
   const removeFolder = useFolders((s) => s.remove);
   const renameFolder = useFolders((s) => s.rename);
   const setFolderDetails = useFolders((s) => s.setNameAndDescription);
   const togglePinned = useFolders((s) => s.togglePinned);
+  const removeServer = useServers((s) => s.remove);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(folder.name);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const performRemoveFolder = () => {
+    if (subscription) {
+      // Subscription folder: full purge so the entry doesn't keep haunting
+      // the Profiles page (was the cause of bug 2 — "deleted folders /
+      // servers stay in profile").
+      deleteSubscriptionEverywhere(subscription.id);
+      return;
+    }
+    // Standalone folder: drop the folder *and* the servers it contained.
+    // Previously we left the servers behind as orphaned loose entries which
+    // matched no user expectation — if you wanted to keep a server you
+    // would drag it out of the folder first, not press the trash button.
+    for (const id of folder.serverIds) removeServer(id);
+    removeFolder(folder.id);
+  };
+
   const askRemoveFolder = () => {
     const ask =
       useSettingsStore.getState().values["mint.confirmDelete"] !== false;
     if (ask) setConfirmDelete(true);
-    else removeFolder(folder.id);
+    else performRemoveFolder();
   };
 
   const used =
@@ -707,7 +749,7 @@ function FolderHeader({
         )}
 
         <span
-          className="text-[13px] font-mono shrink-0 min-w-[32px] text-right text-white/55"
+          className="text-[13px] font-mono shrink-0 min-w-[32px] text-center text-white/55"
           title="Серверов в папке"
         >
           {count > 0 ? count : "—"}
@@ -729,8 +771,30 @@ function FolderHeader({
             pingingAll ? "opacity-100 cursor-default" : "opacity-0 group-hover:opacity-100"
           )}
         >
-          <RefreshCw size={16} className={pingingAll ? "animate-spin" : undefined} />
+          <Activity size={16} className={pingingAll ? "animate-pulse" : undefined} />
         </button>
+
+        {onRefreshSub && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefreshSub();
+            }}
+            title={refreshingSub ? "Обновляем…" : "Обновить подписку"}
+            disabled={refreshingSub}
+            className={cn(
+              "transition w-8 h-8 grid place-items-center rounded-md hover:bg-white/5 text-white/55 hover:text-white",
+              refreshingSub
+                ? "opacity-100 cursor-default"
+                : "opacity-0 group-hover:opacity-100"
+            )}
+          >
+            <RefreshCw
+              size={16}
+              className={refreshingSub ? "animate-spin" : undefined}
+            />
+          </button>
+        )}
 
         <button
           onClick={(e) => {
@@ -748,7 +812,7 @@ function FolderHeader({
             e.stopPropagation();
             askRemoveFolder();
           }}
-          title="Удалить папку"
+          title={subscription ? "Удалить подписку" : "Удалить папку"}
           className="opacity-0 group-hover:opacity-100 transition w-8 h-8 grid place-items-center rounded-md hover:bg-white/5 text-white/55 hover:text-rose-300"
         >
           <Trash2 size={16} />
@@ -782,7 +846,7 @@ function FolderHeader({
               }}
             />
             <MenuItem
-              icon={RefreshCw}
+              icon={Activity}
               label={
                 pingingAll
                   ? "Пингуем…"
@@ -794,6 +858,17 @@ function FolderHeader({
                 onPingAll();
               }}
             />
+            {onRefreshSub && (
+              <MenuItem
+                icon={RefreshCw}
+                label={refreshingSub ? "Обновляем…" : "Обновить подписку"}
+                disabled={!!refreshingSub}
+                onClick={() => {
+                  setMenu(null);
+                  onRefreshSub();
+                }}
+              />
+            )}
             <MenuItem
               icon={Edit2}
               label="Переименовать"
@@ -836,7 +911,7 @@ function FolderHeader({
             <div className="my-1 border-t border-white/5" />
             <MenuItem
               icon={Trash2}
-              label="Удалить папку"
+              label={subscription ? "Удалить подписку" : "Удалить папку"}
               danger
               onClick={() => {
                 setMenu(null);
@@ -859,16 +934,16 @@ function FolderHeader({
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Удалить папку?"
+        title={subscription ? "Удалить подписку?" : "Удалить папку?"}
         description={
           subscription
-            ? `Папка «${folder.name}» привязана к подписке. Серверы внутри останутся в общем списке, а сама папка исчезнет.`
-            : `Папка «${folder.name}» будет удалена. Серверы внутри останутся в общем списке.`
+            ? `Подписка «${folder.name}» и все ${count > 0 ? `${count} ` : ""}серверов внутри будут удалены. Это действие нельзя отменить.`
+            : `Папка «${folder.name}» и все ${count > 0 ? `${count} ` : ""}серверов внутри будут удалены. Это действие нельзя отменить.`
         }
         confirmLabel="Удалить"
         destructive
         onConfirm={() => {
-          removeFolder(folder.id);
+          performRemoveFolder();
           setConfirmDelete(false);
         }}
         onCancel={() => setConfirmDelete(false)}

@@ -29,6 +29,14 @@ interface FoldersState {
   reorderServers: (folderId: string, ids: string[]) => void;
   collapsedProfileIds: string[];
   toggleProfileCollapsed: (subId: string) => void;
+  // Folder open/closed state on the dashboard. Persisted because the
+  // <ServersList> component is unmounted whenever the user navigates to
+  // Profiles and back, and React-local `useState` collapsed-state was
+  // lost on remount — folders silently re-expanded after every tab
+  // switch (and after every app restart).
+  closedFolderIds: string[];
+  setFolderClosed: (folderId: string, closed: boolean) => void;
+  toggleFolderClosed: (folderId: string) => void;
 }
 
 export const useFolders = create<FoldersState>()(
@@ -151,6 +159,26 @@ export const useFolders = create<FoldersState>()(
             ? st.collapsedProfileIds.filter((x) => x !== subId)
             : [...st.collapsedProfileIds, subId],
         })),
+      closedFolderIds: [],
+      setFolderClosed: (folderId, closed) =>
+        set((st) => {
+          const has = st.closedFolderIds.includes(folderId);
+          if (closed && !has) {
+            return { closedFolderIds: [...st.closedFolderIds, folderId] };
+          }
+          if (!closed && has) {
+            return {
+              closedFolderIds: st.closedFolderIds.filter((x) => x !== folderId),
+            };
+          }
+          return {};
+        }),
+      toggleFolderClosed: (folderId) =>
+        set((st) => ({
+          closedFolderIds: st.closedFolderIds.includes(folderId)
+            ? st.closedFolderIds.filter((x) => x !== folderId)
+            : [...st.closedFolderIds, folderId],
+        })),
       reorderServers: (folderId, ids) =>
         set((st) => ({
           folders: st.folders.map((f) => {
@@ -173,7 +201,22 @@ export const useFolders = create<FoldersState>()(
     }),
     {
       name: "mint.folders.v2",
-      version: 2,
+      // Bumped to 3 so existing v2 stores hit `migrate` and gain a
+      // default `closedFolderIds: []` instead of rehydrating with the
+      // field undefined and crashing `includes(...)` on first toggle.
+      version: 3,
+      migrate: (persisted: unknown) => {
+        if (persisted && typeof persisted === "object") {
+          const p = persisted as Record<string, unknown>;
+          if (!Array.isArray(p.closedFolderIds)) {
+            p.closedFolderIds = [];
+          }
+          if (!Array.isArray(p.collapsedProfileIds)) {
+            p.collapsedProfileIds = [];
+          }
+        }
+        return persisted as FoldersState;
+      },
     }
   )
 );

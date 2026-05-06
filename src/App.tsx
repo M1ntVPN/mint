@@ -121,12 +121,22 @@ function App() {
       });
       // Sliding window of the last few clash url-test samples.
       // Each clash `delay` call opens a fresh outbound (TCP handshake,
-      // possibly TLS), so individual samples spike well above the
-      // steady-state RTT — especially the very first one after
-      // connecting. We display the *minimum* of the recent samples so
-      // the "Пинг" card converges quickly to the best-case round-trip
-      // the tunnel actually achieves, instead of bouncing between
-      // ~2× and ~4× RTT depending on which probe we just finished.
+      // then HTTP request/response), so individual samples spike well
+      // above the steady-state RTT — especially the very first one
+      // after connecting. We display the *minimum* of the recent
+      // samples so the "Пинг" card converges quickly to the best-case
+      // round-trip the tunnel actually achieves, instead of bouncing
+      // between ~2× and ~4× RTT depending on which probe we just
+      // finished.
+      //
+      // The reported value is also halved before display: clash's
+      // `delay` measures TCP-handshake (1 RTT) + HTTP request/response
+      // (1 RTT) ≈ 2 × RTT, while every other speedtest tool (and the
+      // server-row ping in this app) reports a single RTT. Without the
+      // /2 step the dashboard card lies about the tunnel ping by 2×,
+      // which is the user-visible bug ("на спидтесте 100 ms, а у нас
+      // 400") that the previous fix only halved instead of fully
+      // eliminating.
       const recent: number[] = [];
       const RECENT_MAX = 5;
       const probe = async () => {
@@ -139,7 +149,7 @@ function App() {
           // shows the *direct* (pre-VPN) latency, and overwriting it
           // with the via-tunnel RTT made the list lie about which
           // server is actually closest to the user.
-          setPing(Math.min(...recent));
+          setPing(Math.max(1, Math.round(Math.min(...recent) / 2)));
         }
       };
       probe();
