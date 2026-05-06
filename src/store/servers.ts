@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { mapPool } from "../utils/mapPool";
+import { PROBE_SKIP_WRITE } from "../utils/ping";
 
 export type SavedServerSource = "manual" | "subscription" | "file" | "clipboard";
 
@@ -47,7 +48,9 @@ interface ServersState {
   togglePinned: (id: string) => void;
   reorderLoose: (ids: string[]) => void;
   setPing: (id: string, ping: number | null) => void;
-  pingAll: (probe: (s: SavedServer) => Promise<number>) => Promise<void>;
+  pingAll: (
+    probe: (s: SavedServer) => Promise<number | typeof PROBE_SKIP_WRITE>
+  ) => Promise<void>;
 }
 
 const SEED: SavedServer[] = [];
@@ -161,6 +164,7 @@ export const useServers = create<ServersState>()(
         await mapPool(list, 16, async (s) => {
           try {
             const ms = await probe(s);
+            if (ms === PROBE_SKIP_WRITE) return;
             get().setPing(s.id, ms);
           } catch {
             get().setPing(s.id, null);

@@ -21,7 +21,7 @@ import { Flag } from "./Flag";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AddServerDialog } from "./AddServerDialog";
 import { EditDetailsDialog } from "./EditDetailsDialog";
-import { probeServer } from "../utils/ping";
+import { probeServer, PROBE_SKIP_WRITE } from "../utils/ping";
 import { useFolders } from "../store/folders";
 import {
   refreshSubscription as runRefreshSubscription,
@@ -156,8 +156,8 @@ export function ProfilesPage({
     setConfirmDeleteId(id);
   };
 
-  const probe = async (s: SavedServer): Promise<number> => probeServer(s);
-  const sweepProbe = async (s: SavedServer): Promise<number> =>
+  const probe = async (s: SavedServer) => probeServer(s);
+  const sweepProbe = async (s: SavedServer) =>
     probeServer(s, { attempts: 2, timeoutMs: 3000 });
   const folders = useFolders((st) => st.folders);
   const setFolderDetails = useFolders((st) => st.setNameAndDescription);
@@ -222,6 +222,7 @@ export function ProfilesPage({
     setPingingId(s.id);
     try {
       const ms = await probe(s);
+      if (ms === PROBE_SKIP_WRITE) return;
       setPing(s.id, ms);
     } catch {
       setPing(s.id, null);

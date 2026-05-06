@@ -10,7 +10,30 @@ import {
   useSubscriptions,
   type Subscription,
 } from "../store/subscriptions";
-import { probeServer } from "./ping";
+import { probeServer, PROBE_SKIP_WRITE } from "./ping";
+import { parseShareUri } from "./uri";
+
+// Build a stable identity key for a server URI that survives
+// cosmetic provider changes (different param order, extra/removed
+// query params, modified fragment, whitespace, etc.). The 0.3.25
+// fix matched on the full URI string, which broke whenever a
+// subscription provider rewrote any byte — every refreshed server
+// looked "new", so the user's measured ping/load/addedAt got
+// silently wiped.
+//
+// Identity = lowercase protocol + host + port. That ignores the
+// per-user UUID (matters when the user rotates credentials) but is
+// the right call: if the user got a new UUID for the same host:port
+// it's still the same physical box and inheriting the previous
+// measurements is what the user wants.
+function stableServerKey(address: string): string | null {
+  const parsed = parseShareUri(address);
+  if (!parsed.host) return null;
+  const proto = (parsed.protocol || "").toLowerCase();
+  const host = parsed.host.toLowerCase();
+  const port = parsed.port ?? "";
+  return `${proto}://${host}:${port}`;
+}
 
 // Fire-and-forget background ping pass for every server in a
 // subscription whose ping is currently null. Used after the initial
@@ -41,9 +64,17 @@ export function pingMissingServersForSubscription(
       const srv = targets[i];
       try {
         const ms = await probeServer(srv);
+        // While VPN is up the probe returns PROBE_SKIP_WRITE: leave
+        // ping=null so a real measurement can be taken once the
+        // tunnel goes down (or via ICMP in 0.3.27+). Crucially we
+        // don't overwrite null with 0ms, which is what made every
+        // server render as "n/a" when refresh was used while
+        // connected.
+        if (ms === PROBE_SKIP_WRITE) continue;
         setPing(srv.id, ms);
       } catch {
-        setPing(srv.id, null);
+        // Per-server failures stay null; user can retry via
+        // "Пинговать всё" once the network situation changes.
       }
     }
   };
@@ -126,7 +157,14 @@ export async function refreshSubscription(
       }
     >();
     for (const s of oldServers) {
-      customMeta.set(s.address, {
+      const key = stableServerKey(s.address);
+      if (!key) continue;
+      // Last writer wins. In the very unlikely case a subscription
+      // had two distinct URIs that share the same protocol+host+port
+      // (e.g. duplicate entries with different UUIDs) the second
+      // overwrites the first, which is fine — we'll merge them onto
+      // the same fresh row anyway.
+      customMeta.set(key, {
         name: s.name,
         description: s.description,
         favorite: s.favorite,
@@ -141,7 +179,8 @@ export async function refreshSubscription(
     const freshServers = urisToServers(uris, sub.id, {
       description: serverDescription,
     }).map((s) => {
-      const prev = customMeta.get(s.address);
+      const key = stableServerKey(s.address);
+      const prev = key ? customMeta.get(key) : undefined;
       if (!prev) return s;
       const userOverrodeDescription =
         prev.description !== prevBackendDescription;
