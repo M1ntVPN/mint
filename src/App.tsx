@@ -17,7 +17,7 @@ import { useLogs, parseEngineLine } from "./store/logs";
 import { useConnection } from "./store/connection";
 import { startEngine, stopEngine, onEngineExit, onEngineLog } from "./engine/engine";
 import { subscribeTraffic, urlTest } from "./engine/clashApi";
-import { probeServer } from "./utils/ping";
+import { probeServer, PROBE_SKIP_WRITE } from "./utils/ping";
 import { notify } from "./utils/notify";
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "./store/settings";
@@ -275,6 +275,7 @@ function App() {
         pingedSetRef.current.add(s.id);
         try {
           const ms = await probeServer(s);
+          if (ms === PROBE_SKIP_WRITE) continue;
           if (!cancelled) setPing(s.id, ms);
         } catch {
           if (!cancelled) setPing(s.id, null);

@@ -34,7 +34,7 @@ import { EditDetailsDialog } from "./EditDetailsDialog";
 import { useFolders, type Folder as FolderEntry } from "../store/folders";
 import { useServers, type SavedServer } from "../store/servers";
 import { useSubscriptions, type Subscription } from "../store/subscriptions";
-import { probeServer } from "../utils/ping";
+import { probeServer, PROBE_SKIP_WRITE } from "../utils/ping";
 import { useSettingsStore } from "../store/settings";
 import { mapPool } from "../utils/mapPool";
 import {
@@ -126,6 +126,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
     await mapPool(items, 16, async (srv) => {
       try {
         const ms = await sweepProbe(srv);
+        if (ms === PROBE_SKIP_WRITE) return;
         setPing(srv.id, ms);
       } catch {
         setPing(srv.id, null);
@@ -144,6 +145,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
       await mapPool(allSavedServers, 16, async (srv) => {
         try {
           const ms = await sweepProbe(srv);
+          if (ms === PROBE_SKIP_WRITE) return;
           setPing(srv.id, ms);
         } catch {
           setPing(srv.id, null);
@@ -1041,7 +1043,11 @@ function ServerRow({
     setEditing(false);
   };
 
-  const measured = server.ping > 0;
+  // `> 0` was the pre-0.3.26 check, but TCP probe legitimately
+  // returns 0 (or 1) for very nearby endpoints. The real signal of
+  // "no measurement yet" is `ping == null`. The "ping spoofed by
+  // TUN" case is now filtered upstream in probeServer.
+  const measured = server.ping != null;
   const pingColor = !measured
     ? "text-white/40"
     : server.ping < 60
@@ -1074,6 +1080,7 @@ function ServerRow({
     setPinging(true);
     try {
       const ms = await probeServer(savedServer);
+      if (ms === PROBE_SKIP_WRITE) return;
       setPing(server.id, ms);
     } catch {
       setPing(server.id, null);

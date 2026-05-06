@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useFolders } from "../store/folders";
-import { useServers } from "../store/servers";
+import { useServers, type SavedServer } from "../store/servers";
 import {
   capDescription,
   decodeProfileTitle,
@@ -10,6 +10,78 @@ import {
   useSubscriptions,
   type Subscription,
 } from "../store/subscriptions";
+import { probeServer, PROBE_SKIP_WRITE } from "./ping";
+import { parseShareUri } from "./uri";
+
+// Build a stable identity key for a server URI that survives
+// cosmetic provider changes (different param order, extra/removed
+// query params, modified fragment, whitespace, etc.). The 0.3.25
+// fix matched on the full URI string, which broke whenever a
+// subscription provider rewrote any byte — every refreshed server
+// looked "new", so the user's measured ping/load/addedAt got
+// silently wiped.
+//
+// Identity = lowercase protocol + host + port. That ignores the
+// per-user UUID (matters when the user rotates credentials) but is
+// the right call: if the user got a new UUID for the same host:port
+// it's still the same physical box and inheriting the previous
+// measurements is what the user wants.
+function stableServerKey(address: string): string | null {
+  const parsed = parseShareUri(address);
+  if (!parsed.host) return null;
+  const proto = (parsed.protocol || "").toLowerCase();
+  const host = parsed.host.toLowerCase();
+  const port = parsed.port ?? "";
+  return `${proto}://${host}:${port}`;
+}
+
+// Fire-and-forget background ping pass for every server in a
+// subscription whose ping is currently null. Used after the initial
+// import and after each refresh so that genuinely new rows (or rows
+// that were left null by a pre-0.3.25 refresh wipe) get measured
+// without the user having to press "Пинговать всё" manually.
+//
+// Errors are swallowed per-server: a single unreachable host should
+// not abort the rest. Concurrency is bounded so we don't hammer the
+// network or starve sing-box's TUN with hundreds of parallel TCP
+// dials when the user has a 100+ server subscription.
+export function pingMissingServersForSubscription(
+  subscriptionId: string
+): void {
+  const targets: SavedServer[] = useServers
+    .getState()
+    .servers.filter(
+      (s) => s.subscriptionId === subscriptionId && s.ping == null
+    );
+  if (targets.length === 0) return;
+  const setPing = useServers.getState().setPing;
+  const CONCURRENCY = 6;
+  let nextIdx = 0;
+  const run = async (): Promise<void> => {
+    for (;;) {
+      const i = nextIdx++;
+      if (i >= targets.length) return;
+      const srv = targets[i];
+      try {
+        const ms = await probeServer(srv);
+        // While VPN is up the probe returns PROBE_SKIP_WRITE: leave
+        // ping=null so a real measurement can be taken once the
+        // tunnel goes down (or via ICMP in 0.3.27+). Crucially we
+        // don't overwrite null with 0ms, which is what made every
+        // server render as "n/a" when refresh was used while
+        // connected.
+        if (ms === PROBE_SKIP_WRITE) continue;
+        setPing(srv.id, ms);
+      } catch {
+        // Per-server failures stay null; user can retry via
+        // "Пинговать всё" once the network situation changes.
+      }
+    }
+  };
+  void Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, targets.length) }, run)
+  );
+}
 
 interface FetchResp {
   body: string;
@@ -85,7 +157,14 @@ export async function refreshSubscription(
       }
     >();
     for (const s of oldServers) {
-      customMeta.set(s.address, {
+      const key = stableServerKey(s.address);
+      if (!key) continue;
+      // Last writer wins. In the very unlikely case a subscription
+      // had two distinct URIs that share the same protocol+host+port
+      // (e.g. duplicate entries with different UUIDs) the second
+      // overwrites the first, which is fine — we'll merge them onto
+      // the same fresh row anyway.
+      customMeta.set(key, {
         name: s.name,
         description: s.description,
         favorite: s.favorite,
@@ -100,7 +179,8 @@ export async function refreshSubscription(
     const freshServers = urisToServers(uris, sub.id, {
       description: serverDescription,
     }).map((s) => {
-      const prev = customMeta.get(s.address);
+      const key = stableServerKey(s.address);
+      const prev = key ? customMeta.get(key) : undefined;
       if (!prev) return s;
       const userOverrodeDescription =
         prev.description !== prevBackendDescription;
@@ -159,6 +239,11 @@ export async function refreshSubscription(
       supportUrl,
       webPageUrl,
     });
+    // Auto-ping any server in this subscription whose ping is null
+    // — typically: brand-new rows the subscription just added, plus
+    // rows whose ping got wiped by a pre-0.3.25 refresh. Background,
+    // bounded concurrency, errors swallowed per server.
+    pingMissingServersForSubscription(sub.id);
     return { ok: true };
   } catch (e) {
     const err = typeof e === "string" ? e : "Не удалось обновить";
