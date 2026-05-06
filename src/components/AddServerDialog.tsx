@@ -22,6 +22,7 @@ import {
   urisToServers,
   capDescription,
 } from "../store/subscriptions";
+import { pingMissingServersForSubscription } from "../utils/refreshSubscription";
 import { Dropdown } from "./Dropdown";
 import { cn } from "../utils/cn";
 import { parseShareUri } from "../utils/uri";
@@ -237,6 +238,10 @@ export function AddServerDialog({
       if (profileDescription) {
         setFolderNameAndDescription(folderId, friendly, profileDescription);
       }
+      // Kick off a background ping pass for the freshly-imported
+      // servers so the dashboard doesn't sit on a column of `n/a`s
+      // until the user manually presses "Пинговать всё".
+      pingMissingServersForSubscription(subId);
       setSubStatus({ kind: "ok", count: uris.length });
       setTimeout(() => {
         reset();
@@ -279,6 +284,7 @@ export function AddServerDialog({
       const newIds = addMany(urisToServers(uris, subId));
       const folderId = createFolder(filename, { subscriptionId: subId });
       setFolderServerIds(folderId, newIds);
+      pingMissingServersForSubscription(subId);
       reset();
       onClose();
     } catch (e) {

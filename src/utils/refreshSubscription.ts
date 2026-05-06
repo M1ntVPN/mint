@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useFolders } from "../store/folders";
-import { useServers } from "../store/servers";
+import { useServers, type SavedServer } from "../store/servers";
 import {
   capDescription,
   decodeProfileTitle,
@@ -10,6 +10,47 @@ import {
   useSubscriptions,
   type Subscription,
 } from "../store/subscriptions";
+import { probeServer } from "./ping";
+
+// Fire-and-forget background ping pass for every server in a
+// subscription whose ping is currently null. Used after the initial
+// import and after each refresh so that genuinely new rows (or rows
+// that were left null by a pre-0.3.25 refresh wipe) get measured
+// without the user having to press "Пинговать всё" manually.
+//
+// Errors are swallowed per-server: a single unreachable host should
+// not abort the rest. Concurrency is bounded so we don't hammer the
+// network or starve sing-box's TUN with hundreds of parallel TCP
+// dials when the user has a 100+ server subscription.
+export function pingMissingServersForSubscription(
+  subscriptionId: string
+): void {
+  const targets: SavedServer[] = useServers
+    .getState()
+    .servers.filter(
+      (s) => s.subscriptionId === subscriptionId && s.ping == null
+    );
+  if (targets.length === 0) return;
+  const setPing = useServers.getState().setPing;
+  const CONCURRENCY = 6;
+  let nextIdx = 0;
+  const run = async (): Promise<void> => {
+    for (;;) {
+      const i = nextIdx++;
+      if (i >= targets.length) return;
+      const srv = targets[i];
+      try {
+        const ms = await probeServer(srv);
+        setPing(srv.id, ms);
+      } catch {
+        setPing(srv.id, null);
+      }
+    }
+  };
+  void Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, targets.length) }, run)
+  );
+}
 
 interface FetchResp {
   body: string;
@@ -159,6 +200,11 @@ export async function refreshSubscription(
       supportUrl,
       webPageUrl,
     });
+    // Auto-ping any server in this subscription whose ping is null
+    // — typically: brand-new rows the subscription just added, plus
+    // rows whose ping got wiped by a pre-0.3.25 refresh. Background,
+    // bounded concurrency, errors swallowed per server.
+    pingMissingServersForSubscription(sub.id);
     return { ok: true };
   } catch (e) {
     const err = typeof e === "string" ? e : "Не удалось обновить";
