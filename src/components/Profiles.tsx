@@ -29,7 +29,14 @@ import {
 } from "../utils/refreshSubscription";
 import { useConnection } from "../store/connection";
 import { useSettingsStore } from "../store/settings";
-import { ChevronDown, RefreshCw, FolderOpen, Trash } from "lucide-react";
+import {
+  ChevronDown,
+  RefreshCw,
+  FolderOpen,
+  Trash,
+  HelpCircle,
+  ExternalLink,
+} from "lucide-react";
 import type { ConnState } from "../types";
 
 type SortKey = "added-desc" | "added-asc" | "ping-asc" | "name-asc" | "favorite";
@@ -51,6 +58,19 @@ interface ProfilesPageProps {
   onConnectTo?: (id: string) => void;
   state?: ConnState;
   selectedId?: string | null;
+}
+
+// Open a subscription-supplied URL (support / web page) in the
+// user's default browser via tauri-plugin-shell. Refuses anything
+// that isn't http(s) so a hostile subscription server can't get the
+// user to open `file://`, `vbscript:`, or other surprise schemes.
+async function openSubscriptionLink(url: string): Promise<void> {
+  try {
+    if (!/^https?:\/\//i.test(url)) return;
+    const { open } = await import("@tauri-apps/plugin-shell");
+    await open(url);
+  } catch {
+  }
 }
 
 function parseInstallConfigUrl(deepLink: string): string | null {
@@ -659,6 +679,30 @@ function SubscriptionFolder({
         >
           <Copy size={16} />
         </button>
+        {sub.supportUrl && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openSubscriptionLink(sub.supportUrl!);
+            }}
+            title={`Поддержка — ${sub.supportUrl}`}
+            className="opacity-0 group-hover:opacity-100 transition w-9 h-9 grid place-items-center rounded-md text-white/65 hover:text-white hover:bg-white/[0.07]"
+          >
+            <HelpCircle size={16} />
+          </button>
+        )}
+        {sub.webPageUrl && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openSubscriptionLink(sub.webPageUrl!);
+            }}
+            title={`Страница подписки — ${sub.webPageUrl}`}
+            className="opacity-0 group-hover:opacity-100 transition w-9 h-9 grid place-items-center rounded-md text-white/65 hover:text-white hover:bg-white/[0.07]"
+          >
+            <ExternalLink size={16} />
+          </button>
+        )}
         <button
           onClick={(e) => {
             e.stopPropagation();

@@ -279,11 +279,42 @@ export function buildSingboxConfig(opts: BuildOptions): string {
       { type: "dns", tag: "dns-out" },
     ],
     route: (() => {
+      // Collect every proxy outbound's own server (host or IP literal)
+      // so we can pin direct outbound for any traffic — including
+      // traffic from non-Mint apps — that targets the VPN endpoint
+      // itself. Without this, a browser tab opened to
+      // `https://premium-ru.geodema.network/...` while the VPN is up
+      // gets routed through the tun -> proxy outbound -> the same
+      // server, asking the server to forward TCP to itself. Reality
+      // accepts the inner CONNECT, you get an infinite encapsulation
+      // loop, and every read times out at sing-box's connect_timeout
+      // (12m15s in user logs). Bypassing the proxy server's host at
+      // the route layer breaks the loop without forcing the user to
+      // configure a custom whitelist.
+      const proxyDomains = new Set<string>();
+      const proxyIPs = new Set<string>();
+      for (const ob of proxyOutbounds) {
+        const h = typeof ob.server === "string" ? ob.server.trim() : "";
+        if (!h) continue;
+        if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
+          proxyIPs.add(`${h}/32`);
+        } else if (h.includes(":") && /^[0-9a-fA-F:]+$/.test(h)) {
+          proxyIPs.add(`${h}/128`);
+        } else {
+          proxyDomains.add(h.toLowerCase());
+        }
+      }
       const baseRules: Record<string, unknown>[] = [
         { protocol: "dns", outbound: "dns-out" },
         { process_name: ["Mint", "Mint.exe"], outbound: "direct" },
         { ip_is_private: true, outbound: "direct" },
       ];
+      if (proxyDomains.size > 0) {
+        baseRules.push({ domain: [...proxyDomains], outbound: "direct" });
+      }
+      if (proxyIPs.size > 0) {
+        baseRules.push({ ip_cidr: [...proxyIPs], outbound: "direct" });
+      }
       let finalOut: "proxy" | "direct" = "proxy";
       if (tunneling && tunneling.mode !== "full") {
         const r = buildTunnelingRules(tunneling);

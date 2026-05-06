@@ -14,7 +14,14 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useServers } from "../store/servers";
 import { useFolders } from "../store/folders";
-import { useSubscriptions, extractShareUris, parseUserInfo, decodeProfileTitle, urisToServers } from "../store/subscriptions";
+import {
+  useSubscriptions,
+  extractShareUris,
+  parseUserInfo,
+  decodeProfileTitle,
+  urisToServers,
+  capDescription,
+} from "../store/subscriptions";
 import { Dropdown } from "./Dropdown";
 import { cn } from "../utils/cn";
 import { parseShareUri } from "../utils/uri";
@@ -39,6 +46,12 @@ interface SubscriptionResponse {
   user_info: string | null;
   update_interval: string | null;
   title: string | null;
+  // New (optional) header-driven metadata. Older Mint servers and
+  // any non-Mint subscription source will leave these as null.
+  server_description: string | null;
+  profile_description: string | null;
+  support_url: string | null;
+  web_page_url: string | null;
 }
 
 export function AddServerDialog({
@@ -59,6 +72,9 @@ export function AddServerDialog({
   const addSub = useSubscriptions((s) => s.add);
   const createFolder = useFolders((s) => s.create);
   const setFolderServerIds = useFolders((s) => s.setServerIds);
+  const setFolderNameAndDescription = useFolders(
+    (s) => s.setNameAndDescription
+  );
 
   const [tab, setTab] = useState<"uri" | "manual" | "file" | "subscription">(
     initialTab ?? "uri"
@@ -193,6 +209,10 @@ export function AddServerDialog({
       const userInfo = parseUserInfo(resp.user_info);
       const title = decodeProfileTitle(resp.title);
       const friendly = subName.trim() || title || hostFromUrl(url);
+      const profileDescription = capDescription(resp.profile_description);
+      const serverDescription = capDescription(resp.server_description);
+      const supportUrl = resp.support_url?.trim() || undefined;
+      const webPageUrl = resp.web_page_url?.trim() || undefined;
       const subId = addSub({
         name: friendly,
         url,
@@ -204,10 +224,19 @@ export function AddServerDialog({
         updateIntervalHours: resp.update_interval
           ? Number(resp.update_interval)
           : undefined,
+        description: profileDescription,
+        backendDescription: profileDescription,
+        supportUrl,
+        webPageUrl,
       });
-      const newIds = addMany(urisToServers(uris, subId));
+      const newIds = addMany(
+        urisToServers(uris, subId, { description: serverDescription })
+      );
       const folderId = createFolder(friendly, { subscriptionId: subId });
       setFolderServerIds(folderId, newIds);
+      if (profileDescription) {
+        setFolderNameAndDescription(folderId, friendly, profileDescription);
+      }
       setSubStatus({ kind: "ok", count: uris.length });
       setTimeout(() => {
         reset();

@@ -15,6 +15,21 @@ export interface Subscription {
   expiresAt?: number;
   updateIntervalHours?: number;
   lastError?: string | null;
+  // Optional metadata reported by the subscription server via
+  // response headers. None of these can crash any pre-existing
+  // subscription created before this field landed (undefined is the
+  // legitimate "not provided" value).
+  description?: string;
+  supportUrl?: string;
+  webPageUrl?: string;
+  // The last value of `description` we *received* from the server.
+  // Used by `refreshSubscription` to distinguish "user has not
+  // touched the description" (accept new server value on refresh)
+  // from "user typed something distinct" (keep the user's edit).
+  // Old subscriptions have description === undefined ===
+  // backendDescription, so the first refresh accepts whatever the
+  // server now reports — migration is bug-free.
+  backendDescription?: string;
 }
 
 interface SubscriptionsState {
@@ -460,10 +475,29 @@ function isPlaceholderUri(uri: string): boolean {
   return false;
 }
 
+// Hard cap on description length on the way into the store. Keeps
+// localStorage compact and prevents a malicious / misconfigured
+// subscription server from blowing out the UI by returning a
+// multi-megabyte tagline. 280 mirrors the twitter limit — it fits
+// comfortably in a single truncated row in both the dashboard folder
+// header and the Profiles subscription header.
+const DESCRIPTION_CAP = 280;
+
+export function capDescription(raw: string | null | undefined): string | undefined {
+  if (raw == null) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > DESCRIPTION_CAP
+    ? trimmed.slice(0, DESCRIPTION_CAP)
+    : trimmed;
+}
+
 export function urisToServers(
   uris: string[],
-  subId: string
+  subId: string,
+  options?: { description?: string }
 ): Omit<SavedServer, "id" | "addedAt">[] {
+  const description = capDescription(options?.description);
   const drafts: Omit<SavedServer, "id" | "addedAt">[] = [];
   for (const uri of uris) {
     if (isPlaceholderUri(uri)) continue;
@@ -476,6 +510,7 @@ export function urisToServers(
     drafts.push({
       name: p.name || p.host || uri.slice(0, 20),
       address: uri,
+      description,
       protocol: p.protocol || "vless",
       country: p.country,
       city: p.host,

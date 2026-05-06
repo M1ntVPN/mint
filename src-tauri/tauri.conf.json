@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mint VPN",
   "mainBinaryName": "Mint",
-  "version": "0.3.23",
+  "version": "0.3.24",
   "identifier": "com.mint.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -64,6 +64,14 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "mint",
+          "mintvpn"
+        ]
+      }
+    },
     "updater": {
       "active": true,
       "dialog": false,

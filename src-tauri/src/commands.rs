@@ -7,6 +7,21 @@ pub struct SubscriptionResponse {
     pub user_info: Option<String>,
     pub update_interval: Option<String>,
     pub title: Option<String>,
+    /// `x-server-description` — short tagline shown under each server
+    /// row imported from this subscription. Optional; tolerant parse:
+    /// missing / non-UTF8 / empty -> None.
+    pub server_description: Option<String>,
+    /// `x-profile-description` — short tagline shown under the folder
+    /// header that wraps this subscription. Optional, same semantics.
+    pub profile_description: Option<String>,
+    /// `support-url` — a contact link (Telegram bot, support form,
+    /// etc.) the subscription folder header surfaces as a one-click
+    /// button. Optional.
+    pub support_url: Option<String>,
+    /// `profile-web-page-url` — landing page / dashboard link the
+    /// subscription folder header surfaces alongside the support link.
+    /// Optional.
+    pub web_page_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -231,11 +246,24 @@ async fn try_fetch(url: &str, ua: &str) -> Result<SubscriptionResponse, String> 
     let user_info = header("subscription-userinfo");
     let update_interval = header("profile-update-interval");
     let title = header("profile-title");
+    let server_description = header("x-server-description");
+    let profile_description = header("x-profile-description");
+    let support_url = header("support-url");
+    let web_page_url = header("profile-web-page-url");
     let body = resp
         .text()
         .await
         .map_err(|e| format!("Не удалось прочитать ответ: {e}"))?;
-    Ok(SubscriptionResponse { body, user_info, update_interval, title })
+    Ok(SubscriptionResponse {
+        body,
+        user_info,
+        update_interval,
+        title,
+        server_description,
+        profile_description,
+        support_url,
+        web_page_url,
+    })
 }
 
 fn looks_like_subscription(body: &str) -> bool {
