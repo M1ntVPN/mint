@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "mint"
-version = "0.3.28"
+version = "0.3.29"
 dependencies = [
  "libc",
  "once_cell",
