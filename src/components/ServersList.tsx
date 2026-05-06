@@ -749,7 +749,7 @@ function FolderHeader({
         )}
 
         <span
-          className="text-[13px] font-mono shrink-0 min-w-[32px] text-right text-white/55"
+          className="text-[13px] font-mono shrink-0 min-w-[32px] text-center text-white/55"
           title="Серверов в папке"
         >
           {count > 0 ? count : "—"}
