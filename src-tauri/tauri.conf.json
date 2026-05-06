@@ -64,6 +64,13 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "mint"
+        ]
+      }
+    },
     "updater": {
       "active": true,
       "dialog": false,
