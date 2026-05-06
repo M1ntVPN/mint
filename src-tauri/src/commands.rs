@@ -53,13 +53,34 @@ pub fn is_elevated() -> bool {
     }
 }
 
+// Probe a remote host:port with a raw TCP handshake and report the
+// median round-trip in milliseconds.
+//
+// Why no TLS / HTTP layer here:
+// The previous version of this command optionally layered a TLS HEAD
+// request on top of the TCP connect, which sounded reasonable for a
+// "ping" but produced **fake-looking** times against VPN proxy ports.
+// VPN servers (VLESS, Trojan, Shadowsocks, etc.) do not actually
+// terminate TLS in the way `reqwest` expects — most either close the
+// connection mid-handshake or hold it open while sing-box-style
+// inner-protocol negotiation happens. The old code recorded the
+// elapsed time even when the TLS handshake **failed** with a
+// non-connect error, so what got reported was "TCP connect + part of
+// a doomed TLS handshake" instead of a clean RTT. The user reported
+// every server in the list converging on ~30–40 ms regardless of
+// geography, which is exactly what an early-aborted TLS handshake to
+// a nearby anti-censorship CDN edge looks like.
+//
+// The fix is to drop the TLS layer entirely. A TCP three-way handshake
+// is a single RTT — what every other ping/mtr/speedtest tool reports —
+// and it works equally well for every protocol we support, since
+// `server:port` is always the literal listener for the proxy.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn ping_test(
     app: AppHandle,
     host: String,
     attempts: Option<usize>,
     timeout_ms: Option<u64>,
-    tls_handshake: Option<bool>,
 ) -> Result<u32, String> {
     use std::net::ToSocketAddrs;
     use tokio::net::TcpStream;
@@ -100,50 +121,10 @@ pub async fn ping_test(
     let timeout_ms_received = timeout_ms;
     let attempts = attempts.unwrap_or(3).clamp(1, 10);
     let attempt_timeout = Duration::from_millis(timeout_ms.unwrap_or(2500).clamp(200, 10_000));
-    let do_tls = tls_handshake.unwrap_or(true);
     let mut measurements: Vec<u128> = Vec::with_capacity(attempts);
     let mut errors: Vec<String> = Vec::new();
     let mut last_err: Option<String> = None;
-    let mut used_tls = false;
-    let mut tls_failed = false;
-    let tls_client = if do_tls {
-        reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .timeout(attempt_timeout)
-            .connect_timeout(attempt_timeout)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .ok()
-    } else {
-        None
-    };
-    let tls_url = format!("https://{}:{}/", addr.ip(), addr.port());
     for _ in 0..attempts {
-        let started = Instant::now();
-        if let Some(client) = tls_client.as_ref() {
-            match client.head(&tls_url).send().await {
-                Ok(_) => {
-                    let elapsed = started.elapsed().as_millis();
-                    measurements.push(elapsed);
-                    used_tls = true;
-                    tokio::time::sleep(Duration::from_millis(80)).await;
-                    continue;
-                }
-                Err(e) => {
-                    if e.is_connect() {
-                        errors.push(format!("tls: {e}"));
-                        last_err = Some(format!("tls: {e}"));
-                    } else {
-                        let elapsed = started.elapsed().as_millis();
-                        measurements.push(elapsed);
-                        used_tls = true;
-                        tokio::time::sleep(Duration::from_millis(80)).await;
-                        continue;
-                    }
-                    tls_failed = true;
-                }
-            }
-        }
         let started = Instant::now();
         match timeout(attempt_timeout, TcpStream::connect(addr)).await {
             Ok(Ok(stream)) => {
@@ -174,7 +155,7 @@ pub async fn ping_test(
             "errors": errors,
             "args_attempts": attempts_received,
             "args_timeout_ms": timeout_ms_received,
-            "mode": if used_tls { "tls" } else if tls_failed { "tls→tcp" } else { "tcp" },
+            "mode": "tcp",
         }),
     );
 

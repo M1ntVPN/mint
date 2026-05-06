@@ -153,25 +153,20 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
       setPingingAllGlobal(false);
     }
   };
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  // Folder open/closed state lives in zustand+persist (`closedFolderIds`)
+  // rather than React-local `useState`. <ServersList> is unmounted when
+  // the user navigates to Profiles and remounted on the way back, which
+  // used to wipe the local state and silently re-expand every folder
+  // on every tab switch (and after every app restart). Storing only the
+  // *closed* IDs keeps the default behaviour “newly created folder is
+  // open” without bookkeeping for new IDs.
+  const closedFolderIds = useFolders((s) => s.closedFolderIds);
+  const toggleFolderClosed = useFolders((s) => s.toggleFolderClosed);
+  const isFolderOpen = (folderId: string) => !closedFolderIds.includes(folderId);
   const [query, setQuery] = useState("");
   const [protoFilter, setProtoFilter] = useState<string>("all");
   const [addOpen, setAddOpen] = useState<false | "subscription" | "uri">(false);
   const [folderDlgOpen, setFolderDlgOpen] = useState(false);
-
-  useEffect(() => {
-    setOpen((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const f of folderStore.folders) {
-        if (next[f.id] === undefined) {
-          next[f.id] = true;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [folderStore.folders]);
 
   const protocols = useMemo(() => {
     const set = new Set<string>();
@@ -313,7 +308,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
       {query || protoFilter !== "all" ? (
         <div className="space-y-1.5">
           {groupedFolders.map(({ folder, items }) => {
-            const isOpen = open[folder.id] ?? true;
+            const isOpen = isFolderOpen(folder.id);
             const filtered = items.filter(matches);
             const sub = folder.subscriptionId
               ? subById.get(folder.subscriptionId)
@@ -324,9 +319,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                   folder={folder}
                   count={items.length}
                   isOpen={isOpen}
-                  onToggle={() =>
-                    setOpen((o) => ({ ...o, [folder.id]: !(o[folder.id] ?? true) }))
-                  }
+                  onToggle={() => toggleFolderClosed(folder.id)}
                   subscription={sub}
                   onPingAll={() => pingFolder(folder)}
                   pingingAll={pingingFolder.has(folder.id)}
@@ -372,7 +365,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
           className="space-y-1.5"
         >
           {groupedFolders.map(({ folder, items }) => {
-            const isOpen = open[folder.id] ?? true;
+            const isOpen = isFolderOpen(folder.id);
             const filtered = items.filter(matches);
             const sub = folder.subscriptionId
               ? subById.get(folder.subscriptionId)
@@ -383,9 +376,7 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
                 folder={folder}
                 count={items.length}
                 isOpen={isOpen}
-                onToggle={() =>
-                  setOpen((o) => ({ ...o, [folder.id]: !(o[folder.id] ?? true) }))
-                }
+                onToggle={() => toggleFolderClosed(folder.id)}
                 subscription={sub}
                 onPingAll={() => pingFolder(folder)}
                 pingingAll={pingingFolder.has(folder.id)}
