@@ -68,34 +68,45 @@ pub fn is_elevated() -> bool {
     }
 }
 
-// Probe a remote host:port with a raw TCP handshake and report the
-// median round-trip in milliseconds.
+// Probe a remote host:port and report the median round-trip in
+// milliseconds. By default we layer a TLS HEAD request on top of the
+// TCP connect (the 0.3.22 behavior); callers can opt out with
+// `tlsHandshake: false` to get a pure TCP three-way handshake.
 //
-// Why no TLS / HTTP layer here:
-// The previous version of this command optionally layered a TLS HEAD
-// request on top of the TCP connect, which sounded reasonable for a
-// "ping" but produced **fake-looking** times against VPN proxy ports.
-// VPN servers (VLESS, Trojan, Shadowsocks, etc.) do not actually
-// terminate TLS in the way `reqwest` expects — most either close the
-// connection mid-handshake or hold it open while sing-box-style
-// inner-protocol negotiation happens. The old code recorded the
-// elapsed time even when the TLS handshake **failed** with a
-// non-connect error, so what got reported was "TCP connect + part of
-// a doomed TLS handshake" instead of a clean RTT. The user reported
-// every server in the list converging on ~30–40 ms regardless of
-// geography, which is exactly what an early-aborted TLS handshake to
-// a nearby anti-censorship CDN edge looks like.
+// Why default to TLS instead of bare TCP:
+// Mint runs sing-box in TUN mode with the gvisor user-mode TCP/IP
+// stack. While the tunnel is up, every outbound TCP `connect()` is
+// SYN-ACK'd by gvisor *locally*, in <1ms, before the SYN ever leaves
+// the machine. `TcpStream::connect` therefore returns almost
+// instantly and the median lands at 0–1ms regardless of how far the
+// real server is. That is what 0.3.20–0.3.27 shipped, and it made
+// the per-row ping / "Пинговать всё" buttons report a meaningless
+// "0ms" any time the VPN was connected.
 //
-// The fix is to drop the TLS layer entirely. A TCP three-way handshake
-// is a single RTT — what every other ping/mtr/speedtest tool reports —
-// and it works equally well for every protocol we support, since
-// `server:port` is always the literal listener for the proxy.
+// The Mint process itself is matched by `process_name: ["Mint",
+// "Mint.exe"] -> direct` in `configBuilder.ts`, so once gvisor
+// hands sing-box bytes to forward they go out via the `direct`
+// outbound (auto-bound to the active physical interface), bypassing
+// the proxy. But the application-side TCP stream is already
+// "connected" by then. The only way to measure a real RTT under TUN
+// is to force gvisor to actually move bytes — which is exactly what
+// a TLS ClientHello / ServerHello exchange does. In practice this
+// gives the same numbers users saw in 0.3.22.
+//
+// The 0.3.20 commit dropped the TLS layer because some VPN proxy
+// ports (Reality, etc.) don't terminate TLS the way `reqwest`
+// expects, which inflated readings. We accept that trade-off:
+// inflated-but-real beats fake-zero, and matches what the user
+// explicitly asked for. Callers that want the cleaner bare-TCP RTT
+// can pass `tlsHandshake: false` (e.g. when the VPN is known to be
+// off).
 #[tauri::command(rename_all = "camelCase")]
 pub async fn ping_test(
     app: AppHandle,
     host: String,
     attempts: Option<usize>,
     timeout_ms: Option<u64>,
+    tls_handshake: Option<bool>,
 ) -> Result<u32, String> {
     use std::net::ToSocketAddrs;
     use tokio::net::TcpStream;
@@ -136,10 +147,57 @@ pub async fn ping_test(
     let timeout_ms_received = timeout_ms;
     let attempts = attempts.unwrap_or(3).clamp(1, 10);
     let attempt_timeout = Duration::from_millis(timeout_ms.unwrap_or(2500).clamp(200, 10_000));
+    let do_tls = tls_handshake.unwrap_or(true);
     let mut measurements: Vec<u128> = Vec::with_capacity(attempts);
     let mut errors: Vec<String> = Vec::new();
     let mut last_err: Option<String> = None;
+    let mut used_tls = false;
+    let mut tls_failed = false;
+    let tls_client = if do_tls {
+        reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .timeout(attempt_timeout)
+            .connect_timeout(attempt_timeout)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .ok()
+    } else {
+        None
+    };
+    let tls_url = format!("https://{}:{}/", addr.ip(), addr.port());
     for _ in 0..attempts {
+        if let Some(client) = tls_client.as_ref() {
+            let started = Instant::now();
+            match client.head(&tls_url).send().await {
+                Ok(_) => {
+                    let elapsed = started.elapsed().as_millis();
+                    measurements.push(elapsed);
+                    used_tls = true;
+                    tokio::time::sleep(Duration::from_millis(80)).await;
+                    continue;
+                }
+                Err(e) => {
+                    if e.is_connect() {
+                        // Couldn't even establish the TCP underneath the
+                        // TLS attempt — fall through to a bare-TCP probe
+                        // below so we still emit a measurement.
+                        errors.push(format!("tls: {e}"));
+                        last_err = Some(format!("tls: {e}"));
+                        tls_failed = true;
+                    } else {
+                        // Server accepted the TCP but didn't speak HTTPS
+                        // (very common on VPN proxy ports). The bytes
+                        // still made a real round trip, so the elapsed
+                        // time is a useful — if slightly inflated — RTT.
+                        let elapsed = started.elapsed().as_millis();
+                        measurements.push(elapsed);
+                        used_tls = true;
+                        tokio::time::sleep(Duration::from_millis(80)).await;
+                        continue;
+                    }
+                }
+            }
+        }
         let started = Instant::now();
         match timeout(attempt_timeout, TcpStream::connect(addr)).await {
             Ok(Ok(stream)) => {
@@ -160,6 +218,13 @@ pub async fn ping_test(
         tokio::time::sleep(Duration::from_millis(80)).await;
     }
 
+    let mode = if used_tls {
+        "tls"
+    } else if tls_failed {
+        "tls→tcp"
+    } else {
+        "tcp"
+    };
     let _ = app.emit(
         "ping-diag",
         serde_json::json!({
@@ -170,7 +235,7 @@ pub async fn ping_test(
             "errors": errors,
             "args_attempts": attempts_received,
             "args_timeout_ms": timeout_ms_received,
-            "mode": "tcp",
+            "mode": mode,
         }),
     );
 
@@ -180,7 +245,7 @@ pub async fn ping_test(
     measurements.sort_unstable();
     let median = measurements[measurements.len() / 2];
     eprintln!(
-        "[ping_test] {host} -> {addr} dns={dns_ms}ms attempts={measurements:?} median={median}ms"
+        "[ping_test] {host} -> {addr} dns={dns_ms}ms mode={mode} attempts={measurements:?} median={median}ms"
     );
     Ok(median.min(u32::MAX as u128) as u32)
 }

@@ -10,11 +10,15 @@ export interface ProbeOpts {
 // `PROBE_SKIP_WRITE` was used in 0.3.26 to gate probes while the
 // VPN tunnel was up, on the (overly defensive) theory that a TUN
 // device would always SYN-ACK probes locally and report a fake 0ms.
-// In practice Mint.exe is in the engine's process-based direct
-// list, so its outbound TCP bypasses TUN and probes return real
-// latency even while connected — exactly as it worked in 0.3.22
-// before refresh existed. Gating the probe just made the user's
-// "Пинговать всё" button look broken when VPN was on.
+// 0.3.27 removed the gate but still used a bare TCP-connect probe,
+// which gvisor's TUN stack happily ACKs locally — so the readings
+// really were stuck at 0ms whenever the user was connected.
+//
+// 0.3.28 restores the 0.3.22 behavior: the Rust `ping_test` command
+// now layers a TLS HEAD on top of the TCP connect by default. The
+// TLS handshake forces gvisor to actually move bytes through
+// sing-box's `direct` outbound (Mint is in the process-name direct
+// list), so we end up measuring a real RTT even with the VPN up.
 //
 // Kept as an exported symbol so callers that imported it still
 // type-check; `probeServer` never returns it.
