@@ -74,6 +74,14 @@ export async function refreshSubscription(
         description?: string;
         favorite?: boolean;
         pinned?: boolean;
+        // Preserved across refresh so the dashboard / Profiles
+        // doesn't visibly "reset" every time the user pulls fresh
+        // servers from the subscription. Without this, all rows
+        // showed `n/a` for ping and "1 мин назад" for added time.
+        addedAt: number;
+        ping: number | null;
+        load: number | null;
+        pingedAt?: number;
       }
     >();
     for (const s of oldServers) {
@@ -82,6 +90,10 @@ export async function refreshSubscription(
         description: s.description,
         favorite: s.favorite,
         pinned: s.pinned,
+        addedAt: s.addedAt,
+        ping: s.ping,
+        load: s.load,
+        pingedAt: s.pingedAt,
       });
     }
     useServers.getState().removeBySubscription(sub.id);
@@ -98,6 +110,10 @@ export async function refreshSubscription(
         description: userOverrodeDescription ? prev.description : s.description,
         favorite: prev.favorite,
         pinned: prev.pinned,
+        addedAt: prev.addedAt,
+        ping: prev.ping,
+        load: prev.load,
+        pingedAt: prev.pingedAt,
       };
     });
     const newIds = useServers.getState().addMany(freshServers);
