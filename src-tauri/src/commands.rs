@@ -69,37 +69,41 @@ pub fn is_elevated() -> bool {
 }
 
 // Probe a remote host:port and report the median round-trip in
-// milliseconds. By default we layer a TLS HEAD request on top of the
-// TCP connect (the 0.3.22 behavior); callers can opt out with
-// `tlsHandshake: false` to get a pure TCP three-way handshake.
+// milliseconds. The probe is a single "TCP connect + 1-byte data
+// round trip" exchange — it forces a real packet to traverse the
+// network and waits for any byte (or RST) coming back, then reports
+// the elapsed time.
 //
-// Why default to TLS instead of bare TCP:
-// Mint runs sing-box in TUN mode with the gvisor user-mode TCP/IP
-// stack. While the tunnel is up, every outbound TCP `connect()` is
-// SYN-ACK'd by gvisor *locally*, in <1ms, before the SYN ever leaves
-// the machine. `TcpStream::connect` therefore returns almost
-// instantly and the median lands at 0–1ms regardless of how far the
-// real server is. That is what 0.3.20–0.3.27 shipped, and it made
-// the per-row ping / "Пинговать всё" buttons report a meaningless
-// "0ms" any time the VPN was connected.
+// Why not bare `TcpStream::connect` alone:
+// While Mint's tunnel is up, every outbound TCP `connect()` from a
+// `direct`-routed process is still SYN-ACK'd by sing-box's gvisor
+// stack locally, in <1ms, before any real packet leaves the box.
+// `TcpStream::connect` therefore returns almost instantly, and the
+// median lands at 0–1ms regardless of how far the real server is.
+// That is what 0.3.20–0.3.27 shipped (with bare TCP), and it made
+// the per-row ping report a meaningless "0ms" whenever the VPN was
+// connected.
 //
-// The Mint process itself is matched by `process_name: ["Mint",
-// "Mint.exe"] -> direct` in `configBuilder.ts`, so once gvisor
-// hands sing-box bytes to forward they go out via the `direct`
-// outbound (auto-bound to the active physical interface), bypassing
-// the proxy. But the application-side TCP stream is already
-// "connected" by then. The only way to measure a real RTT under TUN
-// is to force gvisor to actually move bytes — which is exactly what
-// a TLS ClientHello / ServerHello exchange does. In practice this
-// gives the same numbers users saw in 0.3.22.
+// Why not a TLS HEAD (the 0.3.28 behaviour):
+// `reqwest::Client::head` performs TCP-connect + TLS-handshake +
+// HTTP-HEAD-request + reading-headers — that's 3-4 round trips
+// instead of one, and on a Reality server the TLS handshake gets
+// forwarded to the server's `dest` (e.g. `www.gstatic.com`) which
+// is geographically far from the proxy node itself. The result is
+// per-row pings inflated 3–5× over the real ping the user sees in
+// the connected dashboard's "Пинг" card.
 //
-// The 0.3.20 commit dropped the TLS layer because some VPN proxy
-// ports (Reality, etc.) don't terminate TLS the way `reqwest`
-// expects, which inflated readings. We accept that trade-off:
-// inflated-but-real beats fake-zero, and matches what the user
-// explicitly asked for. Callers that want the cleaner bare-TCP RTT
-// can pass `tlsHandshake: false` (e.g. when the VPN is known to be
-// off).
+// Why "connect + 1 byte exchange":
+// We open a TCP stream (gvisor fake-ACK is fine), then write a
+// single byte and `read()` for any response. The write/read pair
+// forces gvisor → sing-box → real-socket → server bytes-on-wire,
+// and the server's first response (TLS alert, RST, banner, or
+// HTTP-style error byte) closes the loop in ~1 RTT. The TLS
+// handshake to `dest` is never started, so we don't pay for the
+// extra hop to gstatic/cloudflare CDN.
+//
+// Callers can still force the legacy TLS-HEAD path with
+// `tlsHandshake: true` for debugging.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn ping_test(
     app: AppHandle,
@@ -143,16 +147,17 @@ pub async fn ping_test(
     };
     let dns_ms = dns_started.elapsed().as_millis();
 
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
     let attempts_received = attempts;
     let timeout_ms_received = timeout_ms;
     let attempts = attempts.unwrap_or(3).clamp(1, 10);
     let attempt_timeout = Duration::from_millis(timeout_ms.unwrap_or(2500).clamp(200, 10_000));
-    let do_tls = tls_handshake.unwrap_or(true);
+    let do_tls = tls_handshake.unwrap_or(false);
     let mut measurements: Vec<u128> = Vec::with_capacity(attempts);
     let mut errors: Vec<String> = Vec::new();
     let mut last_err: Option<String> = None;
     let mut used_tls = false;
-    let mut tls_failed = false;
     let tls_client = if do_tls {
         reqwest::Client::builder()
             .danger_accept_invalid_certs(true)
@@ -177,32 +182,64 @@ pub async fn ping_test(
                     continue;
                 }
                 Err(e) => {
-                    if e.is_connect() {
-                        // Couldn't even establish the TCP underneath the
-                        // TLS attempt — fall through to a bare-TCP probe
-                        // below so we still emit a measurement.
-                        errors.push(format!("tls: {e}"));
-                        last_err = Some(format!("tls: {e}"));
-                        tls_failed = true;
-                    } else {
-                        // Server accepted the TCP but didn't speak HTTPS
-                        // (very common on VPN proxy ports). The bytes
-                        // still made a real round trip, so the elapsed
-                        // time is a useful — if slightly inflated — RTT.
+                    let es = format!("tls: {e}");
+                    errors.push(es.clone());
+                    last_err = Some(es);
+                    if !e.is_connect() {
                         let elapsed = started.elapsed().as_millis();
                         measurements.push(elapsed);
                         used_tls = true;
                         tokio::time::sleep(Duration::from_millis(80)).await;
                         continue;
                     }
+                    // fall through to data-plane probe below
                 }
             }
         }
+        // Data-plane probe: TCP connect, ship a minimal TLS 1.0
+        // ClientHello, await the first byte of the server's response.
+        // The connect itself may be locally fake-ACK'd by sing-box's
+        // gvisor TUN stack (~0ms); the ClientHello+read pair is what
+        // forces gvisor → sing-box → real-socket → server bytes-on-
+        // wire and back. Server responds with ServerHello (TLS-aware
+        // ports), a TLS Alert (mismatched version), or RST (non-TLS
+        // ports) — any of those closes the loop in ~1 RTT.
         let started = Instant::now();
-        match timeout(attempt_timeout, TcpStream::connect(addr)).await {
-            Ok(Ok(stream)) => {
+        let probe = async {
+            let mut stream = TcpStream::connect(addr).await?;
+            // 51-byte TLS 1.0 ClientHello with a single cipher and
+            // null compression. Real servers respond to this on the
+            // first packet without waiting for additional handshake
+            // data, so the read returns within one network round
+            // trip instead of a (very long) server-side timeout.
+            const CLIENT_HELLO: &[u8] = &[
+                // TLS record header: type=handshake (0x16), version=1.0,
+                // record length = 45 (4 byte handshake header + 41 byte body)
+                0x16, 0x03, 0x01, 0x00, 0x2D,
+                // handshake: ClientHello (0x01), body length = 41
+                0x01, 0x00, 0x00, 0x29,
+                // protocol version: TLS 1.2
+                0x03, 0x03,
+                // 32 random bytes (zeros are fine for our purposes)
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                // session id length = 0
+                0x00,
+                // cipher suites: length=2, TLS_RSA_WITH_AES_256_CBC_SHA
+                0x00, 0x02, 0x00, 0x35,
+                // compression methods: length=1, null
+                0x01, 0x00,
+            ];
+            let _ = stream.write_all(CLIENT_HELLO).await;
+            let mut buf = [0u8; 1];
+            // Any read result (data, EOF, error) means bytes
+            // traversed the network — record the elapsed time.
+            let _ = stream.read(&mut buf).await;
+            std::io::Result::Ok(())
+        };
+        match timeout(attempt_timeout, probe).await {
+            Ok(Ok(())) => {
                 let elapsed = started.elapsed().as_millis();
-                drop(stream);
                 measurements.push(elapsed);
             }
             Ok(Err(e)) => {
@@ -218,13 +255,7 @@ pub async fn ping_test(
         tokio::time::sleep(Duration::from_millis(80)).await;
     }
 
-    let mode = if used_tls {
-        "tls"
-    } else if tls_failed {
-        "tls→tcp"
-    } else {
-        "tcp"
-    };
+    let mode = if used_tls { "tls" } else { "tcp+probe" };
     let _ = app.emit(
         "ping-diag",
         serde_json::json!({
