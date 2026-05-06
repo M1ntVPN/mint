@@ -69,9 +69,9 @@ pub fn is_elevated() -> bool {
 }
 
 // Probe a remote host:port and report the median round-trip in
-// milliseconds. By default we layer a TLS HEAD request on top of the
-// TCP connect (the 0.3.22 behavior); callers can opt out with
-// `tlsHandshake: false` to get a pure TCP three-way handshake.
+// milliseconds. By default we layer a single TLS ClientHello on top
+// of the TCP connect; callers can opt out with `tlsHandshake: false`
+// to get a pure TCP three-way handshake.
 //
 // Why default to TLS instead of bare TCP:
 // Mint runs sing-box in TUN mode with the gvisor user-mode TCP/IP
@@ -79,9 +79,7 @@ pub fn is_elevated() -> bool {
 // SYN-ACK'd by gvisor *locally*, in <1ms, before the SYN ever leaves
 // the machine. `TcpStream::connect` therefore returns almost
 // instantly and the median lands at 0–1ms regardless of how far the
-// real server is. That is what 0.3.20–0.3.27 shipped, and it made
-// the per-row ping / "Пинговать всё" buttons report a meaningless
-// "0ms" any time the VPN was connected.
+// real server is.
 //
 // The Mint process itself is matched by `process_name: ["Mint",
 // "Mint.exe"] -> direct` in `configBuilder.ts`, so once gvisor
@@ -89,17 +87,27 @@ pub fn is_elevated() -> bool {
 // outbound (auto-bound to the active physical interface), bypassing
 // the proxy. But the application-side TCP stream is already
 // "connected" by then. The only way to measure a real RTT under TUN
-// is to force gvisor to actually move bytes — which is exactly what
-// a TLS ClientHello / ServerHello exchange does. In practice this
-// gives the same numbers users saw in 0.3.22.
+// is to force gvisor to actually move bytes — which is what sending
+// a TLS ClientHello and waiting for the first response byte does.
 //
-// The 0.3.20 commit dropped the TLS layer because some VPN proxy
-// ports (Reality, etc.) don't terminate TLS the way `reqwest`
-// expects, which inflated readings. We accept that trade-off:
-// inflated-but-real beats fake-zero, and matches what the user
-// explicitly asked for. Callers that want the cleaner bare-TCP RTT
-// can pass `tlsHandshake: false` (e.g. when the VPN is known to be
-// off).
+// We deliberately do NOT use `reqwest::head()` here. A full HTTP
+// HEAD over rustls is TCP-connect + TLS-1.3 handshake (which on
+// Reality/Vision servers transparently forwards to the configured
+// `dest=` host like www.gstatic.com — across the public internet,
+// not just to our proxy node) + an HTTP request/response. That is
+// 3–4 RTT and routinely inflates list-pings to 200–500ms, while
+// the connect-panel ping (`/proxies/.../delay` over an already-open
+// tunnel) shows the real ~1 RTT.
+//
+// Sending a 50-byte TLS 1.0 ClientHello and reading a single byte
+// of the reply takes exactly one round trip after TCP-connect: the
+// server answers with a ServerHello, a TLS Alert, or an RST — all
+// of those are a single packet from the proxy's own TLS stack and
+// never traverse the `dest=` forwarder. The numbers it produces
+// match the connect-panel within noise.
+//
+// Callers that want the cleaner bare-TCP RTT can still pass
+// `tlsHandshake: false` (e.g. when the VPN is known to be off).
 #[tauri::command(rename_all = "camelCase")]
 pub async fn ping_test(
     app: AppHandle,
@@ -153,48 +161,42 @@ pub async fn ping_test(
     let mut last_err: Option<String> = None;
     let mut used_tls = false;
     let mut tls_failed = false;
-    let tls_client = if do_tls {
-        reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .timeout(attempt_timeout)
-            .connect_timeout(attempt_timeout)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .ok()
-    } else {
-        None
-    };
-    let tls_url = format!("https://{}:{}/", addr.ip(), addr.port());
     for _ in 0..attempts {
-        if let Some(client) = tls_client.as_ref() {
+        if do_tls {
             let started = Instant::now();
-            match client.head(&tls_url).send().await {
-                Ok(_) => {
+            match tls_hello_probe(addr, attempt_timeout).await {
+                Ok(()) => {
                     let elapsed = started.elapsed().as_millis();
                     measurements.push(elapsed);
                     used_tls = true;
                     tokio::time::sleep(Duration::from_millis(80)).await;
                     continue;
                 }
-                Err(e) => {
-                    if e.is_connect() {
-                        // Couldn't even establish the TCP underneath the
-                        // TLS attempt — fall through to a bare-TCP probe
-                        // below so we still emit a measurement.
-                        errors.push(format!("tls: {e}"));
-                        last_err = Some(format!("tls: {e}"));
-                        tls_failed = true;
-                    } else {
-                        // Server accepted the TCP but didn't speak HTTPS
-                        // (very common on VPN proxy ports). The bytes
-                        // still made a real round trip, so the elapsed
-                        // time is a useful — if slightly inflated — RTT.
-                        let elapsed = started.elapsed().as_millis();
-                        measurements.push(elapsed);
-                        used_tls = true;
-                        tokio::time::sleep(Duration::from_millis(80)).await;
-                        continue;
-                    }
+                Err(TlsProbeErr::Connect(e)) => {
+                    // Couldn't even establish the TCP underneath the
+                    // TLS attempt — fall through to a bare-TCP probe
+                    // below so we still emit a measurement.
+                    errors.push(format!("tls: {e}"));
+                    last_err = Some(format!("tls: {e}"));
+                    tls_failed = true;
+                }
+                Err(TlsProbeErr::AfterConnect) => {
+                    // We finished the TCP three-way handshake and the
+                    // peer also reacted to our ClientHello (RST,
+                    // half-close, etc.) — that round-trip is a real
+                    // RTT, count it.
+                    let elapsed = started.elapsed().as_millis();
+                    measurements.push(elapsed);
+                    used_tls = true;
+                    tokio::time::sleep(Duration::from_millis(80)).await;
+                    continue;
+                }
+                Err(TlsProbeErr::Timeout) => {
+                    errors.push("tls: timeout".into());
+                    last_err = Some("tls: timeout".into());
+                    tls_failed = true;
+                    tokio::time::sleep(Duration::from_millis(80)).await;
+                    continue;
                 }
             }
         }
@@ -248,6 +250,83 @@ pub async fn ping_test(
         "[ping_test] {host} -> {addr} dns={dns_ms}ms mode={mode} attempts={measurements:?} median={median}ms"
     );
     Ok(median.min(u32::MAX as u128) as u32)
+}
+
+enum TlsProbeErr {
+    /// TCP `connect()` failed before we could send anything.
+    Connect(String),
+    /// We timed out waiting for either the TCP connect, the
+    /// ClientHello write, or the first byte of the reply.
+    Timeout,
+    /// TCP succeeded and our ClientHello reached the peer, but the
+    /// peer responded by closing/resetting instead of speaking TLS.
+    /// The caller can still treat the elapsed time as a real RTT.
+    AfterConnect,
+}
+
+// Send a tiny, version-agnostic TLS 1.0 ClientHello and wait for the
+// first byte of the server's response. This is the cheapest probe
+// that still forces a real round trip across the proxy:
+//   - The record header advertises TLS 1.0 so even ancient stacks
+//     accept it.
+//   - The inner ClientHello advertises TLS 1.2 (0x0303) and a single
+//     mandatory cipher suite (TLS_RSA_WITH_AES_128_CBC_SHA, 0x002F).
+//   - There are no extensions — no SNI, no ALPN, no Reality auth.
+//
+// Reality / Vision proxies that don't recognise the auth handshake
+// will reply with a TLS Alert (single record, ~7 bytes) or close the
+// connection. Either way we read exactly one byte and stop. We never
+// finish a handshake, so we never trigger the proxy's `dest=`
+// forwarder — the measurement stays local to the proxy.
+async fn tls_hello_probe(
+    addr: std::net::SocketAddr,
+    attempt_timeout: std::time::Duration,
+) -> Result<(), TlsProbeErr> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
+
+    // 5-byte TLS record header (0x16 = handshake, 0x0301 = TLS 1.0,
+    // length = 0x002D = 45) followed by a 45-byte ClientHello body:
+    //   handshake header  : 01 00 00 29       (ClientHello, len 41)
+    //   client_version    : 03 03             (TLS 1.2)
+    //   random            : 32 zero bytes
+    //   session_id        : 00                (empty)
+    //   cipher_suites     : 00 02 00 2F       (TLS_RSA_WITH_AES_128_CBC_SHA)
+    //   compression       : 01 00             (null)
+    // Total wire size: 50 bytes.
+    const CLIENT_HELLO: [u8; 50] = [
+        0x16, 0x03, 0x01, 0x00, 0x2D,
+        0x01, 0x00, 0x00, 0x29,
+        0x03, 0x03,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x00,
+        0x00, 0x02, 0x00, 0x2F,
+        0x01, 0x00,
+    ];
+
+    let mut stream = match timeout(attempt_timeout, TcpStream::connect(addr)).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(TlsProbeErr::Connect(e.to_string())),
+        Err(_) => return Err(TlsProbeErr::Timeout),
+    };
+    let _ = stream.set_nodelay(true);
+
+    match timeout(attempt_timeout, stream.write_all(&CLIENT_HELLO)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(_)) => return Err(TlsProbeErr::AfterConnect),
+        Err(_) => return Err(TlsProbeErr::Timeout),
+    }
+
+    let mut buf = [0u8; 1];
+    match timeout(attempt_timeout, stream.read(&mut buf)).await {
+        // Read of any size (including 0 = clean EOF) means the peer
+        // saw our bytes and reacted — that's a full RTT.
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(_)) => Err(TlsProbeErr::AfterConnect),
+        Err(_) => Err(TlsProbeErr::Timeout),
+    }
 }
 
 #[tauri::command]
