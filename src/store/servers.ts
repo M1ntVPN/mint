@@ -26,7 +26,18 @@ export interface SavedServer {
 interface ServersState {
   servers: SavedServer[];
   add: (s: Omit<SavedServer, "id" | "addedAt"> & { id?: string }) => string;
-  addMany: (ss: (Omit<SavedServer, "id" | "addedAt"> & { id?: string })[]) => string[];
+  // Optional `id` (auto-generated when missing) and `addedAt` (defaults
+  // to now) so callers like `refreshSubscription` can re-add servers
+  // while preserving the user's original add date and per-server
+  // measurements (ping / load / pingedAt). Preserving the latter is
+  // why all servers showed `n/a` after a refresh — we threw away the
+  // measured ping along with the row.
+  addMany: (
+    ss: (Omit<SavedServer, "id" | "addedAt"> & {
+      id?: string;
+      addedAt?: number;
+    })[]
+  ) => string[];
   remove: (id: string) => void;
   removeBySubscription: (subId: string) => void;
   rename: (id: string, name: string) => void;
@@ -65,7 +76,7 @@ export const useServers = create<ServersState>()(
         const fresh = ss.map((s, i) => ({
           ...s,
           id: newIds[i],
-          addedAt: stamp,
+          addedAt: s.addedAt ?? stamp,
         })) as SavedServer[];
         set((state) => ({ servers: [...fresh, ...state.servers] }));
         return newIds;
