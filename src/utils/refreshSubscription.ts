@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useFolders } from "../store/folders";
 import { useServers } from "../store/servers";
 import {
+  capDescription,
   decodeProfileTitle,
   extractShareUris,
   parseUserInfo,
@@ -15,6 +16,12 @@ interface FetchResp {
   user_info: string | null;
   update_interval: string | null;
   title: string | null;
+  // Optional metadata. Older Mint servers and any non-Mint
+  // subscription provider leave these as null.
+  server_description: string | null;
+  profile_description: string | null;
+  support_url: string | null;
+  web_page_url: string | null;
 }
 
 export interface RefreshSubscriptionResult {
@@ -43,9 +50,23 @@ export async function refreshSubscription(
     }
     const userInfo = parseUserInfo(resp.user_info);
     const title = decodeProfileTitle(resp.title);
+    const profileDescription = capDescription(resp.profile_description);
+    const serverDescription = capDescription(resp.server_description);
+    const supportUrl = resp.support_url?.trim() || undefined;
+    const webPageUrl = resp.web_page_url?.trim() || undefined;
     const oldServers = useServers
       .getState()
       .servers.filter((s) => s.subscriptionId === sub.id);
+    // For each old server we record (a) what the user currently has
+    // and (b) what *we last received from the server* via the
+    // subscription's per-server description. We store the latter on
+    // the subscription itself (sub.backendDescription) rather than
+    // per-server because all servers in a subscription share the same
+    // backend-provided description. If `prev.description` differs
+    // from `prev.backendDescription`, the user has typed something
+    // distinct → preserve it; otherwise the user has not customised
+    // anything → accept the new server value.
+    const prevBackendDescription = sub.backendDescription;
     const customMeta = new Map<
       string,
       {
@@ -64,13 +85,17 @@ export async function refreshSubscription(
       });
     }
     useServers.getState().removeBySubscription(sub.id);
-    const freshServers = urisToServers(uris, sub.id).map((s) => {
+    const freshServers = urisToServers(uris, sub.id, {
+      description: serverDescription,
+    }).map((s) => {
       const prev = customMeta.get(s.address);
       if (!prev) return s;
+      const userOverrodeDescription =
+        prev.description !== prevBackendDescription;
       return {
         ...s,
         name: prev.name,
-        description: prev.description,
+        description: userOverrodeDescription ? prev.description : s.description,
         favorite: prev.favorite,
         pinned: prev.pinned,
       };
@@ -83,6 +108,20 @@ export async function refreshSubscription(
       ? existing.id
       : fState.create(friendly, { subscriptionId: sub.id });
     fState.setServerIds(folderId, newIds);
+    // Folder name + description: same smart-merge story. If the
+    // folder's current description equals what the server last sent,
+    // the user has not customised it → accept the new value.
+    const currentFolder = fState.folders.find((f) => f.id === folderId);
+    const folderDescriptionUntouched =
+      !currentFolder ||
+      currentFolder.description === prevBackendDescription;
+    if (folderDescriptionUntouched) {
+      fState.setNameAndDescription(
+        folderId,
+        currentFolder?.name ?? friendly,
+        profileDescription ?? ""
+      );
+    }
     updateSub(sub.id, {
       name: friendly,
       syncedAt: Date.now(),
@@ -94,6 +133,15 @@ export async function refreshSubscription(
         ? Number(resp.update_interval)
         : sub.updateIntervalHours,
       lastError: null,
+      // Preserve the user's edit on `description` if they made one;
+      // otherwise the new server value wins.
+      description:
+        sub.description !== prevBackendDescription
+          ? sub.description
+          : profileDescription,
+      backendDescription: profileDescription,
+      supportUrl,
+      webPageUrl,
     });
     return { ok: true };
   } catch (e) {

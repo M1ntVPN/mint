@@ -195,6 +195,7 @@ fn run_desktop() {
                     .iter()
                     .filter(|a| {
                         a.starts_with("mint://")
+                            || a.starts_with("mintvpn://")
                             || a.starts_with("flclashx://")
                             || a.starts_with("clash://")
                             || a.starts_with("sing-box://")
