@@ -35,7 +35,8 @@ import { useFolders, type Folder as FolderEntry } from "../store/folders";
 import { useServers, type SavedServer } from "../store/servers";
 import { useSubscriptions, type Subscription } from "../store/subscriptions";
 import { probeServer, PROBE_SKIP_WRITE } from "../utils/ping";
-import { useSettingsStore } from "../store/settings";
+import { useSettingsStore, useSetting } from "../store/settings";
+import { useConnection } from "../store/connection";
 import { mapPool } from "../utils/mapPool";
 import {
   refreshSubscription as runRefreshSubscription,
@@ -898,10 +899,29 @@ function FolderHeader({
             />
             <MenuItem
               icon={Copy}
-              label="Скопировать все ссылки"
-              disabled={count === 0}
+              label={
+                subscription
+                  ? "Скопировать ссылку подписки"
+                  : "Скопировать все ссылки"
+              }
+              disabled={subscription ? !subscription.url : count === 0}
               onClick={() => {
                 setMenu(null);
+                if (subscription) {
+                  // For a subscription folder the user almost always
+                  // wants to share / re-import the *subscription URL*
+                  // itself, not the dozens of per-server URIs it
+                  // currently expands to. Copying the per-server list
+                  // also leaks short-lived UUIDs/credentials that the
+                  // subscription rotates on its own schedule, which
+                  // the user usually didn't intend to share.
+                  if (subscription.url) {
+                    navigator.clipboard
+                      .writeText(subscription.url)
+                      .catch(() => undefined);
+                  }
+                  return;
+                }
                 const all = useServers.getState().servers;
                 const uris = folder.serverIds
                   .map((id) => all.find((s) => s.id === id)?.address)
@@ -1043,27 +1063,43 @@ function ServerRow({
     setEditing(false);
   };
 
+  // When the user opts into `mint.pingMode = "ping"` (default), the
+  // row for the *connected* server mirrors the dashboard "Пинг" card
+  // — i.e. the one-RTT tunnel ping — instead of its own direct probe.
+  // For every other row (and for the connected row when the user
+  // picked `"ms"`), we keep showing the direct-probe number that the
+  // sweep / per-row ping button last measured. This is what the user
+  // wanted: when connected, both surfaces agree on a single number.
+  const [pingMode] = useSetting<string>("mint.pingMode", "ping");
+  const tunnelPing = useConnection((s) => s.tunnelPing);
+  const connState = useConnection((s) => s.state);
+  const useTunnelPing =
+    pingMode === "ping" &&
+    selected &&
+    connState === "connected" &&
+    tunnelPing != null;
   // `> 0` was the pre-0.3.26 check, but TCP probe legitimately
   // returns 0 (or 1) for very nearby endpoints. The real signal of
   // "no measurement yet" is `ping == null`. The "ping spoofed by
   // TUN" case is now filtered upstream in probeServer.
-  const measured = server.ping != null;
+  const displayedPing = useTunnelPing ? tunnelPing : server.ping;
+  const measured = displayedPing != null;
   const pingColor = !measured
     ? "text-white/40"
-    : server.ping < 60
+    : displayedPing < 60
       ? "text-emerald-300"
-      : server.ping < 120
+      : displayedPing < 120
         ? "text-amber-300"
         : "text-rose-300";
   const sigLevel = !measured
     ? 0
-    : server.ping < 60
+    : displayedPing < 60
       ? 4
-      : server.ping < 120
+      : displayedPing < 120
         ? 3
-        : server.ping < 180
+        : displayedPing < 180
           ? 2
-          : server.ping < 300
+          : displayedPing < 300
             ? 1
             : 0;
   const sigColor =
@@ -1295,7 +1331,7 @@ function ServerRow({
           title={
             !measured
               ? "Пинг ещё не измерен"
-              : `Сигнал: ${server.ping}ms`
+              : `Сигнал: ${displayedPing}ms`
           }
         >
           {[0.35, 0.55, 0.75, 1].map((h, i) => (
@@ -1316,7 +1352,7 @@ function ServerRow({
           )}
           title={undefined}
         >
-          {pinging ? "…" : measured ? `${server.ping}ms` : "n/a"}
+          {pinging ? "…" : measured ? `${displayedPing}ms` : "n/a"}
         </div>
         <button
           ref={moreBtnRef}

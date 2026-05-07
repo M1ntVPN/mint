@@ -595,12 +595,23 @@ function NetworkSection() {
 }
 
 function ConnectionSection() {
+  const [pingMode, setPingMode] = useSetting<string>("mint.pingMode", "ping");
   return (
-    <SectionCard icon={Layers} title="Multi-hop">
-      <div className="pt-1">
-        <MultiHopCard />
-      </div>
-    </SectionCard>
+    <>
+      <SectionCard icon={Layers} title="Multi-hop">
+        <div className="pt-1">
+          <MultiHopCard />
+        </div>
+      </SectionCard>
+      <SectionCard icon={Wifi} title="Пинг в списке серверов">
+        <RowWrap label="У подключённого сервера показывать тот же пинг, что в плашке (туннельный)">
+          <Toggle
+            value={pingMode === "ping"}
+            onChange={(v) => setPingMode(v ? "ping" : "ms")}
+          />
+        </RowWrap>
+      </SectionCard>
+    </>
   );
 }
 

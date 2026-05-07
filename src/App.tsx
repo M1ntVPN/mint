@@ -149,7 +149,12 @@ function App() {
           // shows the *direct* (pre-VPN) latency, and overwriting it
           // with the via-tunnel RTT made the list lie about which
           // server is actually closest to the user.
-          setPing(Math.max(1, Math.round(Math.min(...recent) / 2)));
+          const oneRtt = Math.max(1, Math.round(Math.min(...recent) / 2));
+          setPing(oneRtt);
+          // Mirror the same value into the connection store so the
+          // connected-server row can opt into showing it instead of
+          // its own direct probe (controlled by `mint.pingMode`).
+          useConnection.getState().setTunnelPing(oneRtt);
         }
       };
       probe();

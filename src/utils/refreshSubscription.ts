@@ -142,6 +142,14 @@ export async function refreshSubscription(
     const customMeta = new Map<
       string,
       {
+        // Preserved so React state in <App> that references server
+        // ids by string (selectedId, selectedIdRef, mint.lastServerId)
+        // keeps pointing at the same row across refresh. Before this,
+        // refresh regenerated every id from scratch, which made the
+        // server-info line under the "Подключено" button vanish the
+        // moment a subscription auto-updated while the user was on
+        // the dashboard.
+        id: string;
         name: string;
         description?: string;
         favorite?: boolean;
@@ -165,6 +173,7 @@ export async function refreshSubscription(
       // overwrites the first, which is fine — we'll merge them onto
       // the same fresh row anyway.
       customMeta.set(key, {
+        id: s.id,
         name: s.name,
         description: s.description,
         favorite: s.favorite,
@@ -186,6 +195,10 @@ export async function refreshSubscription(
         prev.description !== prevBackendDescription;
       return {
         ...s,
+        // Reuse the previous row's id so any UI state holding the
+        // old id (selected server, last-used server in settings,
+        // open menus, etc.) keeps working without a manual reselect.
+        id: prev.id,
         name: prev.name,
         description: userOverrodeDescription ? prev.description : s.description,
         favorite: prev.favorite,
