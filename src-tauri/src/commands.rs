@@ -73,6 +73,17 @@ pub fn is_elevated() -> bool {
 // of the TCP connect; callers can opt out with `tlsHandshake: false`
 // to get a pure TCP three-way handshake.
 //
+// Timing: we report a single round-trip (1 RTT) regardless of the
+// probe mode, so the number lines up with every other "ping" the
+// user sees — system `ping`, the dashboard tunnel-ping card, and
+// external speedtests. For the bare-TCP fallback that's the
+// SYN/SYN-ACK leg of the three-way handshake (one RTT). For the
+// default TLS mode it's the time from *after* TCP-connect to the
+// first byte of the peer's reply (also one RTT). Earlier versions
+// timed both legs of the TLS path and double-counted, which is why
+// the same Finland hop showed ~50 ms in the stats card and ~100 ms
+// in the row.
+//
 // Why default to TLS instead of bare TCP:
 // Mint runs sing-box in TUN mode with the gvisor user-mode TCP/IP
 // stack. While the tunnel is up, every outbound TCP `connect()` is
@@ -163,11 +174,19 @@ pub async fn ping_test(
     let mut tls_failed = false;
     for _ in 0..attempts {
         if do_tls {
-            let started = Instant::now();
             match tls_hello_probe(addr, attempt_timeout).await {
-                Ok(()) => {
-                    let elapsed = started.elapsed().as_millis();
-                    measurements.push(elapsed);
+                Ok(post_connect_ms) => {
+                    measurements.push(post_connect_ms);
+                    used_tls = true;
+                    tokio::time::sleep(Duration::from_millis(80)).await;
+                    continue;
+                }
+                Err(TlsProbeErr::AfterConnect(post_connect_ms)) => {
+                    // We finished the TCP three-way handshake and the
+                    // peer also reacted to our ClientHello (RST,
+                    // half-close, etc.) — that round-trip is a real
+                    // RTT, count it.
+                    measurements.push(post_connect_ms);
                     used_tls = true;
                     tokio::time::sleep(Duration::from_millis(80)).await;
                     continue;
@@ -179,17 +198,6 @@ pub async fn ping_test(
                     errors.push(format!("tls: {e}"));
                     last_err = Some(format!("tls: {e}"));
                     tls_failed = true;
-                }
-                Err(TlsProbeErr::AfterConnect) => {
-                    // We finished the TCP three-way handshake and the
-                    // peer also reacted to our ClientHello (RST,
-                    // half-close, etc.) — that round-trip is a real
-                    // RTT, count it.
-                    let elapsed = started.elapsed().as_millis();
-                    measurements.push(elapsed);
-                    used_tls = true;
-                    tokio::time::sleep(Duration::from_millis(80)).await;
-                    continue;
                 }
                 Err(TlsProbeErr::Timeout) => {
                     errors.push("tls: timeout".into());
@@ -261,7 +269,10 @@ enum TlsProbeErr {
     /// TCP succeeded and our ClientHello reached the peer, but the
     /// peer responded by closing/resetting instead of speaking TLS.
     /// The caller can still treat the elapsed time as a real RTT.
-    AfterConnect,
+    /// `post_connect_ms` is the time from end-of-TCP-connect to the
+    /// peer's reaction — i.e. exactly one round-trip, matching what
+    /// every other ping/speedtest tool reports.
+    AfterConnect(u128),
 }
 
 // Send a tiny, version-agnostic TLS 1.0 ClientHello and wait for the
@@ -281,10 +292,10 @@ enum TlsProbeErr {
 async fn tls_hello_probe(
     addr: std::net::SocketAddr,
     attempt_timeout: std::time::Duration,
-) -> Result<(), TlsProbeErr> {
+) -> Result<u128, TlsProbeErr> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
-    use tokio::time::timeout;
+    use tokio::time::{timeout, Instant};
 
     // 5-byte TLS record header (0x16 = handshake, 0x0301 = TLS 1.0,
     // length = 0x002D = 45) followed by a 45-byte ClientHello body:
@@ -311,11 +322,19 @@ async fn tls_hello_probe(
         Ok(Err(e)) => return Err(TlsProbeErr::Connect(e.to_string())),
         Err(_) => return Err(TlsProbeErr::Timeout),
     };
+    // Start the timer *after* TCP-connect completes. The TCP
+    // three-way handshake is itself one RTT, but every other ping
+    // tool (system `ping`, the dashboard's tunnel-ping card,
+    // external speedtests) reports a single RTT for latency. Timing
+    // both legs would double our reading and is exactly the
+    // user-visible bug — the row pinged 101 ms while the same hop
+    // measured ~50 ms everywhere else.
+    let started = Instant::now();
     let _ = stream.set_nodelay(true);
 
     match timeout(attempt_timeout, stream.write_all(&CLIENT_HELLO)).await {
         Ok(Ok(())) => {}
-        Ok(Err(_)) => return Err(TlsProbeErr::AfterConnect),
+        Ok(Err(_)) => return Err(TlsProbeErr::AfterConnect(started.elapsed().as_millis())),
         Err(_) => return Err(TlsProbeErr::Timeout),
     }
 
@@ -323,8 +342,8 @@ async fn tls_hello_probe(
     match timeout(attempt_timeout, stream.read(&mut buf)).await {
         // Read of any size (including 0 = clean EOF) means the peer
         // saw our bytes and reacted — that's a full RTT.
-        Ok(Ok(_)) => Ok(()),
-        Ok(Err(_)) => Err(TlsProbeErr::AfterConnect),
+        Ok(Ok(_)) => Ok(started.elapsed().as_millis()),
+        Ok(Err(_)) => Err(TlsProbeErr::AfterConnect(started.elapsed().as_millis())),
         Err(_) => Err(TlsProbeErr::Timeout),
     }
 }
