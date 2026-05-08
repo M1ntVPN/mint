@@ -210,8 +210,19 @@ export function AddServerDialog({
       const userInfo = parseUserInfo(resp.user_info);
       const title = decodeProfileTitle(resp.title);
       const friendly = subName.trim() || title || hostFromUrl(url);
-      const profileDescription = capDescription(resp.profile_description);
-      const serverDescription = capDescription(resp.server_description);
+      // Same base64 fallback as in refreshSubscription: panel-side
+      // descriptions are routinely base64-encoded because RFC 7230
+      // forbids non-ASCII bytes in HTTP header values, so the only
+      // safe wire encoding for a Russian / CJK / emoji announcement
+      // is base64 with an optional `base64:` prefix. Reuse the same
+      // detector we use for `profile-title` so the import path and
+      // the refresh path agree on what the description should be.
+      const profileDescription = capDescription(
+        decodeProfileTitle(resp.profile_description)
+      );
+      const serverDescription = capDescription(
+        decodeProfileTitle(resp.server_description)
+      );
       const supportUrl = resp.support_url?.trim() || undefined;
       const webPageUrl = resp.web_page_url?.trim() || undefined;
       const subId = addSub({

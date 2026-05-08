@@ -27,6 +27,10 @@ import {
   refreshSubscription as runRefreshSubscription,
   deleteSubscriptionEverywhere,
 } from "../utils/refreshSubscription";
+import {
+  sortAllByPing,
+  sortBucketContaining,
+} from "../utils/sortByPing";
 import { useConnection } from "../store/connection";
 import { useSettingsStore } from "../store/settings";
 import {
@@ -228,6 +232,13 @@ export function ProfilesPage({
       setPing(s.id, null);
     } finally {
       setPingingId(null);
+      // Same reasoning as the per-row ping in <ServersList>: a freshly
+      // measured row should slide into its right place. Persisting the
+      // sort to folder.serverIds (rather than just the local Profiles
+      // sort key) means switching to the dashboard immediately after
+      // shows the same sorted order — they were drifting apart in
+      // 0.3.31.
+      sortBucketContaining(s.id);
     }
   };
 
@@ -240,6 +251,9 @@ export function ProfilesPage({
       // floats to the top automatically. Without this they had to
       // open the sort menu and click "По пингу" by hand every time.
       setSort("ping-asc");
+      // Persist the sort to every folder.serverIds + the loose
+      // bucket so the dashboard shows the same order on next visit.
+      sortAllByPing();
     } finally {
       setPingingAll(false);
     }

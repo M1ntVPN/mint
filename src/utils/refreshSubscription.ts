@@ -12,6 +12,7 @@ import {
 } from "../store/subscriptions";
 import { probeServer, PROBE_SKIP_WRITE } from "./ping";
 import { parseShareUri } from "./uri";
+import { sortFolderServersByPing } from "./sortByPing";
 
 // Build a stable identity key for a server URI that survives
 // cosmetic provider changes (different param order, extra/removed
@@ -57,6 +58,15 @@ export function pingMissingServersForSubscription(
   const setPing = useServers.getState().setPing;
   const CONCURRENCY = 6;
   let nextIdx = 0;
+  // Resolve the folder backing this subscription so we can re-sort
+  // it as each background probe lands. Without this, refresh
+  // produced a folder that stayed in the URL-provided order until
+  // the user manually pressed "Пропинговать все", making sort look
+  // broken on a freshly imported subscription.
+  const folder = useFolders
+    .getState()
+    .folders.find((f) => f.subscriptionId === subscriptionId);
+  const folderId = folder?.id;
   const run = async (): Promise<void> => {
     for (;;) {
       const i = nextIdx++;
@@ -76,6 +86,7 @@ export function pingMissingServersForSubscription(
         // Per-server failures stay null; user can retry via
         // "Пинговать всё" once the network situation changes.
       }
+      if (folderId) sortFolderServersByPing(folderId);
     }
   };
   void Promise.all(
@@ -122,8 +133,23 @@ export async function refreshSubscription(
     }
     const userInfo = parseUserInfo(resp.user_info);
     const title = decodeProfileTitle(resp.title);
-    const profileDescription = capDescription(resp.profile_description);
-    const serverDescription = capDescription(resp.server_description);
+    // Marzban / Marzneshin / Hiddify panels routinely base64-encode
+    // description headers because RFC 7230 forbids non-ASCII bytes
+    // in HTTP header values, so any panel that wants to ship a
+    // Russian / CJK / emoji announcement has to encode it. `0KDQtdC...`
+    // is a Cyrillic string ("Резервный профиль…") that decoded
+    // perfectly with `atob` but our pipeline forwarded it raw,
+    // which is what the user sees as a wall of base64 in the folder
+    // header. `decodeProfileTitle` already does the
+    // strip-`base64:`-prefix → atob → UTF-8 → reject-control-chars
+    // dance for the title field; reuse it for the description so
+    // both fields handle encoded panels identically.
+    const profileDescription = capDescription(
+      decodeProfileTitle(resp.profile_description)
+    );
+    const serverDescription = capDescription(
+      decodeProfileTitle(resp.server_description)
+    );
     const supportUrl = resp.support_url?.trim() || undefined;
     const webPageUrl = resp.web_page_url?.trim() || undefined;
     const oldServers = useServers
