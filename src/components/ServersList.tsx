@@ -42,6 +42,11 @@ import {
   refreshSubscription as runRefreshSubscription,
   deleteSubscriptionEverywhere,
 } from "../utils/refreshSubscription";
+import {
+  sortAllByPing,
+  sortBucketContaining,
+  sortFolderServersByPing,
+} from "../utils/sortByPing";
 
 function fmtBytes(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "0";
@@ -94,6 +99,8 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
   const allSavedServers = useServers((s) => s.servers);
   const setPing = useServers((s) => s.setPing);
   const reorderLooseServers = useServers((s) => s.reorderLoose);
+  void reorderFolderServers;
+  void reorderLooseServers;
   const subById = useMemo(() => {
     const m = new Map<string, Subscription>();
     for (const s of subs) m.set(s.id, s);
@@ -118,19 +125,12 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
   };
   const sweepProbe = (s: SavedServer) =>
     probeServer(s, { attempts: 2, timeoutMs: 3000 });
-  // Sort an arbitrary list of server ids by their freshly-measured
-  // ping in ascending order. Unreachable rows (ping === null) sink
-  // to the bottom — that's the natural "I want fastest first"
-  // ordering you'd hand-do in any list.
-  const sortIdsByPing = (ids: string[]): string[] => {
-    const latest = useServers.getState().servers;
-    const byId = new Map<string, SavedServer>(latest.map((s) => [s.id, s]));
-    const score = (id: string): number => {
-      const ms = byId.get(id)?.ping;
-      return ms == null ? Number.POSITIVE_INFINITY : ms;
-    };
-    return [...ids].sort((a, b) => score(a) - score(b));
-  };
+  // Per-folder ping sweep. After every individual setPing() we
+  // re-sort that folder so the user sees servers shuffle into
+  // ping-ascending order in real time — which is the whole point of
+  // pressing "Пропинговать все". The post-sweep call to sortAllByPing
+  // covers the corner case where every probe returned the same value
+  // and the incremental sorts ended up no-ops.
   const pingFolder = async (folder: FolderEntry) => {
     if (pingingFolder.has(folder.id)) return;
     setPingingFolder((p) => new Set(p).add(folder.id));
@@ -145,16 +145,9 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
       } catch {
         setPing(srv.id, null);
       }
+      sortFolderServersByPing(folder.id);
     });
-    // Reorder this folder's servers by the freshly measured ping so
-    // the user sees fastest-first the moment the sweep finishes.
-    // We re-read the canonical serverIds from the folder store
-    // because individual setPing() calls may have reshuffled in
-    // unrelated paths between the start of the sweep and now.
-    const fresh =
-      useFolders.getState().folders.find((f) => f.id === folder.id)?.serverIds ??
-      folder.serverIds;
-    reorderFolderServers(folder.id, sortIdsByPing(fresh));
+    sortFolderServersByPing(folder.id);
     setPingingFolder((p) => {
       const n = new Set(p);
       n.delete(folder.id);
@@ -173,24 +166,14 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
         } catch {
           setPing(srv.id, null);
         }
+        // Live re-sort: every measurement that lands updates the
+        // bucket the row lives in. Without this the user stares at
+        // the original (unsorted) order until the very last probe
+        // resolves, which on a slow link feels like "sorting is
+        // broken".
+        sortBucketContaining(srv.id);
       });
-      // Same idea as pingFolder: after the sweep, hoist the fastest
-      // servers to the top of every group the user can see.
-      // - Each folder is reordered against its own ids.
-      // - Loose (folder-less) servers are reordered as one block.
-      const allFolders = useFolders.getState().folders;
-      for (const f of allFolders) {
-        reorderFolderServers(f.id, sortIdsByPing(f.serverIds));
-      }
-      const inFolder = new Set<string>();
-      for (const f of allFolders) for (const id of f.serverIds) inFolder.add(id);
-      const looseIds = useServers
-        .getState()
-        .servers.filter((s) => !inFolder.has(s.id))
-        .map((s) => s.id);
-      if (looseIds.length > 1) {
-        reorderLooseServers(sortIdsByPing(looseIds));
-      }
+      sortAllByPing();
     } finally {
       setPingingAllGlobal(false);
     }
@@ -813,7 +796,12 @@ function FolderHeader({
           disabled={pingingAll || count === 0}
           className={cn(
             "transition w-8 h-8 grid place-items-center rounded-md hover:bg-white/5 text-white/55 hover:text-white",
-            pingingAll ? "opacity-100 cursor-default" : "opacity-0 group-hover:opacity-100"
+            // Always visible. Hiding it behind hover used to confuse
+            // users into pressing the global "Пинговать всё" button
+            // (which sweeps every folder) instead of a single
+            // subscription's worth of servers, and made it look
+            // like the per-folder sweep didn't exist at all.
+            pingingAll ? "opacity-100 cursor-default" : "opacity-100"
           )}
         >
           <Activity size={16} className={pingingAll ? "animate-pulse" : undefined} />
@@ -1164,6 +1152,12 @@ function ServerRow({
       setPing(server.id, null);
     } finally {
       setPinging(false);
+      // After a per-row ping the user expects the row to slide
+      // into its "right" place relative to neighbours. Without
+      // this nothing visibly changes — the new ping number lights
+      // up but the row doesn't move, which is what shipped in
+      // 0.3.31 and is what the user reported as "не сортирует".
+      sortBucketContaining(server.id);
     }
   };
 

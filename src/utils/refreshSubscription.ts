@@ -12,6 +12,7 @@ import {
 } from "../store/subscriptions";
 import { probeServer, PROBE_SKIP_WRITE } from "./ping";
 import { parseShareUri } from "./uri";
+import { sortFolderServersByPing } from "./sortByPing";
 
 // Build a stable identity key for a server URI that survives
 // cosmetic provider changes (different param order, extra/removed
@@ -57,6 +58,15 @@ export function pingMissingServersForSubscription(
   const setPing = useServers.getState().setPing;
   const CONCURRENCY = 6;
   let nextIdx = 0;
+  // Resolve the folder backing this subscription so we can re-sort
+  // it as each background probe lands. Without this, refresh
+  // produced a folder that stayed in the URL-provided order until
+  // the user manually pressed "Пропинговать все", making sort look
+  // broken on a freshly imported subscription.
+  const folder = useFolders
+    .getState()
+    .folders.find((f) => f.subscriptionId === subscriptionId);
+  const folderId = folder?.id;
   const run = async (): Promise<void> => {
     for (;;) {
       const i = nextIdx++;
@@ -76,6 +86,7 @@ export function pingMissingServersForSubscription(
         // Per-server failures stay null; user can retry via
         // "Пинговать всё" once the network situation changes.
       }
+      if (folderId) sortFolderServersByPing(folderId);
     }
   };
   void Promise.all(
