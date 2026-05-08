@@ -133,8 +133,23 @@ export async function refreshSubscription(
     }
     const userInfo = parseUserInfo(resp.user_info);
     const title = decodeProfileTitle(resp.title);
-    const profileDescription = capDescription(resp.profile_description);
-    const serverDescription = capDescription(resp.server_description);
+    // Marzban / Marzneshin / Hiddify panels routinely base64-encode
+    // description headers because RFC 7230 forbids non-ASCII bytes
+    // in HTTP header values, so any panel that wants to ship a
+    // Russian / CJK / emoji announcement has to encode it. `0KDQtdC...`
+    // is a Cyrillic string ("Резервный профиль…") that decoded
+    // perfectly with `atob` but our pipeline forwarded it raw,
+    // which is what the user sees as a wall of base64 in the folder
+    // header. `decodeProfileTitle` already does the
+    // strip-`base64:`-prefix → atob → UTF-8 → reject-control-chars
+    // dance for the title field; reuse it for the description so
+    // both fields handle encoded panels identically.
+    const profileDescription = capDescription(
+      decodeProfileTitle(resp.profile_description)
+    );
+    const serverDescription = capDescription(
+      decodeProfileTitle(resp.server_description)
+    );
     const supportUrl = resp.support_url?.trim() || undefined;
     const webPageUrl = resp.web_page_url?.trim() || undefined;
     const oldServers = useServers
