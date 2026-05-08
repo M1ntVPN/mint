@@ -37,6 +37,7 @@ export function QuotaCard() {
     (acc, s) => acc + (s.uploadBytes ?? 0) + (s.downloadBytes ?? 0),
     0
   );
+  const remaining = Math.max(0, total - used);
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
 
   const earliestExpiry = withQuota
@@ -65,8 +66,11 @@ export function QuotaCard() {
             <span className="text-[13.5px] font-semibold text-white truncate">
               {label}
             </span>
-            <span className="text-[11.5px] text-white/45">
-              {formatBytes(used)} из {formatBytes(total)}
+            <span
+              className="text-[11.5px] text-white/45"
+              title={`Использовано ${formatBytes(used)} из ${formatBytes(total)}`}
+            >
+              {formatBytes(remaining)} / {formatBytes(total)}
               {earliestExpiry ? ` · до ${formatExpiry(earliestExpiry)}` : ""}
             </span>
           </div>

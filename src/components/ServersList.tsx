@@ -118,6 +118,19 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
   };
   const sweepProbe = (s: SavedServer) =>
     probeServer(s, { attempts: 2, timeoutMs: 3000 });
+  // Sort an arbitrary list of server ids by their freshly-measured
+  // ping in ascending order. Unreachable rows (ping === null) sink
+  // to the bottom — that's the natural "I want fastest first"
+  // ordering you'd hand-do in any list.
+  const sortIdsByPing = (ids: string[]): string[] => {
+    const latest = useServers.getState().servers;
+    const byId = new Map<string, SavedServer>(latest.map((s) => [s.id, s]));
+    const score = (id: string): number => {
+      const ms = byId.get(id)?.ping;
+      return ms == null ? Number.POSITIVE_INFINITY : ms;
+    };
+    return [...ids].sort((a, b) => score(a) - score(b));
+  };
   const pingFolder = async (folder: FolderEntry) => {
     if (pingingFolder.has(folder.id)) return;
     setPingingFolder((p) => new Set(p).add(folder.id));
@@ -133,6 +146,15 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
         setPing(srv.id, null);
       }
     });
+    // Reorder this folder's servers by the freshly measured ping so
+    // the user sees fastest-first the moment the sweep finishes.
+    // We re-read the canonical serverIds from the folder store
+    // because individual setPing() calls may have reshuffled in
+    // unrelated paths between the start of the sweep and now.
+    const fresh =
+      useFolders.getState().folders.find((f) => f.id === folder.id)?.serverIds ??
+      folder.serverIds;
+    reorderFolderServers(folder.id, sortIdsByPing(fresh));
     setPingingFolder((p) => {
       const n = new Set(p);
       n.delete(folder.id);
@@ -152,6 +174,23 @@ export function ServersList({ servers, selectedId, onSelect }: Props) {
           setPing(srv.id, null);
         }
       });
+      // Same idea as pingFolder: after the sweep, hoist the fastest
+      // servers to the top of every group the user can see.
+      // - Each folder is reordered against its own ids.
+      // - Loose (folder-less) servers are reordered as one block.
+      const allFolders = useFolders.getState().folders;
+      for (const f of allFolders) {
+        reorderFolderServers(f.id, sortIdsByPing(f.serverIds));
+      }
+      const inFolder = new Set<string>();
+      for (const f of allFolders) for (const id of f.serverIds) inFolder.add(id);
+      const looseIds = useServers
+        .getState()
+        .servers.filter((s) => !inFolder.has(s.id))
+        .map((s) => s.id);
+      if (looseIds.length > 1) {
+        reorderLooseServers(sortIdsByPing(looseIds));
+      }
     } finally {
       setPingingAllGlobal(false);
     }
@@ -599,6 +638,7 @@ function FolderHeader({
   const used =
     (subscription?.uploadBytes ?? 0) + (subscription?.downloadBytes ?? 0);
   const total = subscription?.totalBytes ?? 0;
+  const remaining = Math.max(0, total - used);
   const pct =
     subscription && total > 0
       ? Math.min(100, Math.round((used / total) * 100))
@@ -717,7 +757,7 @@ function FolderHeader({
           className="flex-1 min-w-[88px] relative h-7 rounded-md bg-white/[0.06] ring-1 ring-inset ring-white/[0.04] overflow-hidden"
           title={
             pct !== null
-              ? `${fmtBytes(used)} / ${fmtBytes(total)} (${pct.toFixed(1)}%)`
+              ? `Осталось ${fmtBytes(remaining)} из ${fmtBytes(total)} (использовано ${pct.toFixed(1)}%)`
               : `Использовано ${fmtBytes(used)}`
           }
         >
@@ -731,7 +771,9 @@ function FolderHeader({
           )}
           <div className="absolute inset-0 flex items-center justify-center px-2.5 min-w-0">
             <span className="text-[11.5px] font-mono tabular-nums text-white/90 truncate">
-              {fmtBytes(used)}
+              {pct !== null
+                ? `${fmtBytes(remaining)} / ${fmtBytes(total)}`
+                : fmtBytes(used)}
             </span>
           </div>
         </div>
