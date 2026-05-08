@@ -410,7 +410,21 @@ async fn try_fetch(url: &str, ua: &str) -> Result<SubscriptionResponse, String> 
     let update_interval = header("profile-update-interval");
     let title = header("profile-title");
     let server_description = header("x-server-description");
-    let profile_description = header("x-profile-description");
+    // Folder description: try every realistic header name we've seen
+    // panels emit. Mint's own server uses `x-profile-description`,
+    // but Marzban / Marzneshin / Hiddify / xUI / 3xUI variants ship
+    // the announcement under `announce`, `profile-description`,
+    // `subscription-description` (or even just `description` on the
+    // older Hiddify branch). First non-empty wins. This was the cause
+    // of "у нас не ставится описание подписки" on subscriptions that
+    // worked in Happ — Happ reads `announce` and showed the panel's
+    // welcome message, while Mint only looked at the Mint-specific
+    // header so it always landed on undefined.
+    let profile_description = header("x-profile-description")
+        .or_else(|| header("profile-description"))
+        .or_else(|| header("subscription-description"))
+        .or_else(|| header("announce"))
+        .or_else(|| header("description"));
     let support_url = header("support-url");
     let web_page_url = header("profile-web-page-url");
     let body = resp

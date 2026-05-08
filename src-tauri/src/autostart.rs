@@ -69,7 +69,43 @@ impl<E: std::fmt::Display> From<E> for AutostartError {
 }
 
 #[cfg(windows)]
-fn current_user_id() -> String {
+fn current_user_sid() -> Option<String> {
+    // `whoami /user /fo csv /nh` prints `"DOMAIN\\user","S-1-5-…"`
+    // for the *real* (pre-elevation) interactive user. We prefer the
+    // SID because:
+    //   1. It survives display-name changes and is locale-agnostic
+    //      — non-ASCII USERNAMEs (Cyrillic, CJK) round-trip fine.
+    //   2. Microsoft accounts populate USERNAME with a 5-char prefix
+    //      of the email instead of the actual logon name, which made
+    //      `<UserId>DOMAIN\\user</UserId>` resolve to the wrong
+    //      principal on first logon — the task got created but the
+    //      LogonTrigger never matched the user's real SID.
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = Command::new("whoami.exe")
+        .args(["/user", "/fo", "csv", "/nh"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = stdout.lines().next()?.trim();
+    // CSV row looks like: "domain\user","S-1-5-21-…"
+    let mut fields = line.split(',').map(|f| f.trim().trim_matches('"').to_string());
+    let _account = fields.next()?;
+    let sid = fields.next()?;
+    if sid.starts_with("S-") {
+        Some(sid)
+    } else {
+        None
+    }
+}
+
+#[cfg(windows)]
+fn current_user_account() -> String {
     // `<UserId>` accepts either a SID or a `DOMAIN\user` (or
     // `MACHINE\user` for local accounts) value. The env-var pair
     // populated by Windows for every interactive logon is the
@@ -84,6 +120,16 @@ fn current_user_id() -> String {
     } else {
         format!("{domain}\\{user}")
     }
+}
+
+#[cfg(windows)]
+fn current_user_id() -> String {
+    // Prefer the SID (locale-independent, immune to Microsoft-account
+    // name quirks). Fall back to the legacy DOMAIN\user form only if
+    // `whoami /user` failed for some reason — that path still works
+    // on the vast majority of installs but has the known issues
+    // documented in `current_user_sid`.
+    current_user_sid().unwrap_or_else(current_user_account)
 }
 
 #[cfg(windows)]
@@ -110,6 +156,7 @@ fn task_xml(exe_path: &str, user_id: &str) -> String {
     <LogonTrigger>\n\
       <Enabled>true</Enabled>\n\
       <UserId>{user}</UserId>\n\
+      <Delay>PT8S</Delay>\n\
     </LogonTrigger>\n\
   </Triggers>\n\
   <Principals>\n\

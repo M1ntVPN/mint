@@ -233,8 +233,16 @@ export function ProfilesPage({
 
   const handlePingAll = async () => {
     setPingingAll(true);
-    await pingAll(sweepProbe);
-    setPingingAll(false);
+    try {
+      await pingAll(sweepProbe);
+      // After a fresh sweep the user almost always wants to compare
+      // hops by latency — flip the sort so the lowest-ping server
+      // floats to the top automatically. Without this they had to
+      // open the sort menu and click "По пингу" by hand every time.
+      setSort("ping-asc");
+    } finally {
+      setPingingAll(false);
+    }
   };
 
   const refreshSubscription = async (sub: Subscription) => {
@@ -604,6 +612,7 @@ function SubscriptionFolder({
 }) {
   const used = (sub.uploadBytes ?? 0) + (sub.downloadBytes ?? 0);
   const total = sub.totalBytes ?? 0;
+  const remaining = Math.max(0, total - used);
   const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : null;
   const expireText = sub.expiresAt ? expireRelative(sub.expiresAt) : null;
   return (
@@ -646,9 +655,12 @@ function SubscriptionFolder({
         </div>
 
         {pct !== null && (
-          <div className="hidden md:flex flex-col items-end gap-1 mr-1.5">
+          <div
+            className="hidden md:flex flex-col items-end gap-1 mr-1.5"
+            title={`Использовано ${fmtBytes(used)} из ${fmtBytes(total)} (${pct}%)`}
+          >
             <span className="text-[11px] text-white/55 tabular-nums font-mono">
-              {fmtBytes(used)}
+              {fmtBytes(remaining)} / {fmtBytes(total)}
             </span>
             <div className="w-32 h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
               <div
